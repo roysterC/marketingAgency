@@ -5,6 +5,24 @@
 This is what keeps report quality consistent across runs and makes benchmarking possible — you
 cannot compute a percentile over free text.
 
+## Source of truth
+
+[`lib/taxonomy/findings.ts`](../lib/taxonomy/findings.ts) is authoritative. This document is
+the human-readable view of it, and `npm run check:taxonomy` fails if the two disagree — so a
+code cannot be added in one place and forgotten in the other.
+
+The registry carries three fields beyond the tables below, needed by the benchmark layer:
+
+| Field | Purpose |
+|---|---|
+| `unit` | Unit of the measured value — `hours`, `per_month`, `position`, `none` for binary findings |
+| `polarity` | Which direction is good. Without it a percentile is meaningless: 0.4 reviews/month is bottom-quartile, 0.4 hours to reply is top-quartile |
+| `segments` | Which package the code applies to — drives which collectors a scan runs |
+| `benchmarkable` | Whether the value can feed `benchmarks`. Binary findings have nothing to take a percentile of |
+
+`segments` refines the spec's collector grouping: `gbp`, `localrank` and `citations` are
+SMB-only rather than shared, since a pure online brand has no local listing to audit.
+
 ## Rules
 
 - Codes are `SCREAMING_SNAKE`, prefixed by collector domain

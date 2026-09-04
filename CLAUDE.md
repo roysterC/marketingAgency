@@ -89,5 +89,19 @@ lead. See the collector notes in the spec.
 - Currency GBP, UK-first (postcodes, GBP listings, UK SERPs)
 - Dates ISO-8601
 - Finding codes `SCREAMING_SNAKE`, collectors `lowercase`
+- Row types use `snake_case` to match Postgres exactly — no translation layer
 - Keep docs current: if a decision changes in conversation, update the doc in the same commit
   as the code that reflects it
+
+## Checks
+
+```bash
+npm run check          # both of the below
+npm run typecheck      # tsc --noEmit
+npm run check:taxonomy # findings.ts <-> finding-taxonomy.md <-> SQL CHECK constraints
+```
+
+`check:taxonomy` is what makes "keep docs current" enforceable rather than aspirational. It
+fails if a finding code, its severity or its confidence differs between the registry and the
+doc, if a declared collector emits no codes, or if a TypeScript enum has drifted from its
+CHECK constraint in the schema. Run it before committing taxonomy or schema changes.

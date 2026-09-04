@@ -1,0 +1,16 @@
+{
+  "name": "marketing-agency",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Research & Teardown Engine — Phase A1",
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "check:taxonomy": "node scripts/check-taxonomy.mjs",
+    "check": "npm run typecheck && npm run check:taxonomy"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "typescript": "^5.7.2"
+  }
+}
