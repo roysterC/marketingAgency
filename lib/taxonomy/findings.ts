@@ -11,7 +11,7 @@
  * compile error rather than a runtime surprise.
  */
 
-import type { Collector, Confidence, Polarity, Segment, Severity, Unit } from './enums.js';
+import type { Collector, Confidence, Polarity, Segment, Severity, Unit } from './enums';
 
 export interface FindingDefinition {
   /** Which collector may emit this. */

@@ -4,6 +4,6 @@
  * `import { FINDINGS, type FindingCode } from '@/lib/taxonomy'`
  */
 
-export * from './enums.js';
-export * from './findings.js';
-export * from './benchmark.js';
+export * from './enums';
+export * from './findings';
+export * from './benchmark';

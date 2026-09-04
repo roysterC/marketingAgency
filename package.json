@@ -6,11 +6,13 @@
   "description": "Research & Teardown Engine — Phase A1",
   "scripts": {
     "typecheck": "tsc --noEmit",
+    "test": "node --import tsx --test \"lib/**/*.test.ts\"",
     "check:taxonomy": "node scripts/check-taxonomy.mjs",
-    "check": "npm run typecheck && npm run check:taxonomy"
+    "check": "npm run typecheck && npm run check:taxonomy && npm run test"
   },
   "devDependencies": {
     "@types/node": "^22.10.2",
+    "tsx": "^4.23.13",
     "typescript": "^5.7.2"
   }
 }

@@ -55,6 +55,13 @@ These came out of the design and are load-bearing. Breaking them breaks the prod
    not on the auto-publish allowlist routes to the approval queue, and the hard-blocked actions
    (social replies and DMs, campaign kill decisions, account structure changes, offer changes)
    have no code path at all. See [`docs/delivery-system.md`](docs/delivery-system.md).
+8. **Every paid data source sits behind a provider interface.** Real HTTP adapters and fixture
+   implementations satisfy the same interface, so a stage runs end to end in tests with no keys
+   and no spend. Providers return `Priced<T>`; a `CostMeter` accumulates the total so
+   `scans.cost_pence` reflects reality rather than an estimate.
+9. **Shortlist on free signals before paying to enrich.** Map packs return more places than are
+   worth a paid details lookup. Rank on data already bought, then enrich the top slice
+   (`ENRICH_LIMIT`). This is what keeps a scan inside its £5 budget.
 
 ## Ethical line on the speed-to-lead collector
 
@@ -96,9 +103,10 @@ lead. See the collector notes in the spec.
 ## Checks
 
 ```bash
-npm run check          # both of the below
+npm run check          # all three of the below
 npm run typecheck      # tsc --noEmit
 npm run check:taxonomy # findings.ts <-> finding-taxonomy.md <-> SQL CHECK constraints
+npm test               # node:test via tsx
 ```
 
 `check:taxonomy` is what makes "keep docs current" enforceable rather than aspirational. It

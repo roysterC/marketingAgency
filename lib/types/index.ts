@@ -16,8 +16,8 @@ import type {
   Severity,
   TargetRole,
   Unit,
-} from '../taxonomy/enums.js';
-import type { FindingCode } from '../taxonomy/findings.js';
+} from '../taxonomy/enums';
+import type { FindingCode } from '../taxonomy/findings';
 
 export type Uuid = string;
 /** ISO-8601. */

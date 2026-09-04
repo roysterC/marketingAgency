@@ -6,9 +6,9 @@
  * opposite answers, so direction has to be declared per code rather than guessed.
  */
 
-import type { Benchmark } from '../types/index.js';
-import { MIN_BENCHMARK_SAMPLE } from './enums.js';
-import { FINDINGS, type FindingCode } from './findings.js';
+import type { Benchmark } from '../types/index';
+import { MIN_BENCHMARK_SAMPLE } from './enums';
+import { FINDINGS, type FindingCode } from './findings';
 
 export type Quartile = 'top' | 'upper_mid' | 'lower_mid' | 'bottom' | 'unknown';
 
