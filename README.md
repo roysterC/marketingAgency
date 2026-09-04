@@ -1,2 +1,45 @@
 # marketingAgency
-Automate to increase throughput and margin, and price on outcome.
+
+> Automate to increase throughput and margin, and price on outcome.
+
+The build for an AI-first marketing agency run by a solo technical founder. Sells **systems**,
+not hours.
+
+**Current phase: A1 — the Research & Teardown Engine.** Nothing is implemented yet; the specs
+are complete.
+
+The roadmap runs two tracks: **A (Product)** is sequential and self-paced; **B (Delivery)** is
+triggered by client signings and interrupts A. A paying client outranks the next tool.
+
+## What the teardown engine is
+
+A pipeline that takes a business — name + postcode, or a domain — and produces a competitive
+teardown that would take an agency two weeks. Under 20 minutes, under £5 a run.
+
+It serves three jobs at once: a free cold-outbound lead magnet, a £500–1,500 paid audit, and a
+live sales demo. The cold-mode requirement (zero access to the prospect) is what makes it a
+business rather than just a nice audit tool.
+
+```
+resolve  →  collect  →  normalise  →  analyse  →  render
+```
+
+## Docs
+
+| File | What's in it |
+|---|---|
+| [`CLAUDE.md`](CLAUDE.md) | **Start here.** Locked decisions, engineering rules, stack |
+| [`docs/strategy.md`](docs/strategy.md) | Agency strategy, positioning, offer ladder, edge services |
+| [`docs/roadmap.md`](docs/roadmap.md) | Both tracks, offer-ladder coverage table, ship criteria |
+| [`docs/teardown-engine.md`](docs/teardown-engine.md) | The Phase A1 build spec |
+| [`docs/delivery-system.md`](docs/delivery-system.md) | The human gate — how Tier 2 services ship |
+| [`docs/finding-taxonomy.md`](docs/finding-taxonomy.md) | The closed finding code set |
+| [`docs/schema.md`](docs/schema.md) | Data model |
+| [`docs/data-sources.md`](docs/data-sources.md) | Providers, costs, ToS notes |
+
+## Next step
+
+Phase 1 MVP, in order: schema + taxonomy → resolve → `gbp`/`reviews` → `sitetech` →
+`localrank` → `speedtolead` → `aivis` → analyse + render → run on 10 real businesses.
+
+Ship criteria and the full cut are in the [spec](docs/teardown-engine.md#9-phase-1-mvp).
