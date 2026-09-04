@@ -59,9 +59,11 @@ export const FINDINGS = {
     unit: 'none', polarity: 'none', segments: LOCAL, benchmarkable: false,
     title: 'Opening hours incomplete',
   },
+  // Binary: holiday hours are either set or they aren't. There is no percentile of
+  // "absent", so this carries no unit and never feeds benchmarks.
   GBP_HOURS_STALE_HOLIDAY: {
     collector: 'gbp', severity: 'medium', confidence: 'verified',
-    unit: 'days', polarity: 'lower_better', segments: LOCAL, benchmarkable: true,
+    unit: 'none', polarity: 'none', segments: LOCAL, benchmarkable: false,
     title: 'Holiday hours not set',
   },
   GBP_PHOTOS_SPARSE: {

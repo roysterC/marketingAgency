@@ -108,7 +108,7 @@ LLM writes the narrative over the structured findings.
 
 | Collector | Source | Emits |
 |---|---|---|
-| `gbp` | Google Places API | Listing completeness, categories, hours, photos, posts, Q&A |
+| `gbp` | Google Places API (cold) / Business Profile API (warm) | Listing completeness, categories, hours, photos, attributes — plus claim status, services, posts and Q&A in warm mode only |
 | `localrank` | SERP API | Map pack + organic position across a keyword set |
 | `reviews` | Places API + platform | Volume, velocity, rating, response rate, unanswered negatives |
 | `sitetech` | Own crawl + PageSpeed Insights | CWV, mobile, indexation, schema, titles, broken links |
@@ -128,6 +128,24 @@ LLM writes the narrative over the structured findings.
 ### Warm-mode only (`requires_auth: true`)
 
 GA4, Google Ads, Meta Ads, Search Console, Klaviyo. Phase 2+.
+
+### The cold/warm split inside `gbp`
+
+Worth knowing before pricing the cold audit: **the Places API does not expose everything a
+Business Profile contains.** Claim status, the services list, posts and Q&A all come from the
+Business Profile API, which needs the owner's authorisation.
+
+So 6 of the 10 `gbp` codes are reachable cold; 4 are warm-only
+(`GBP_UNCLAIMED`, `GBP_NO_SERVICES_LISTED`, `GBP_POSTS_STALE`, `GBP_QNA_UNANSWERED`).
+
+This is handled by making those fields optional on the raw capture rather than absent: a cold
+provider leaves them undefined and normalise skips the rules, a warm provider populates them
+and the same rules light up. Reporting "0 services listed" when we simply couldn't see them
+would be a false finding in a paid report.
+
+Commercially this is useful rather than limiting — it gives the free cold teardown a concrete
+reason to convert. "Four more checks run once you grant access" is a better upsell than a
+vaguer promise, and it's honest about why.
 
 ---
 
