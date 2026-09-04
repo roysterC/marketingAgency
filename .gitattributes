@@ -1,0 +1,28 @@
+# Line endings: LF in the repository, on every platform.
+# Keeps diffs clean when the repo is touched from Windows, macOS, or a container.
+* text=auto eol=lf
+
+# Windows-only scripts break with LF — keep these CRLF.
+*.bat text eol=crlf
+*.cmd text eol=crlf
+*.ps1 text eol=crlf
+
+# Binary assets: never normalise, never diff.
+*.png  binary
+*.jpg  binary
+*.jpeg binary
+*.gif  binary
+*.webp binary
+*.ico  binary
+*.pdf  binary
+*.mp4  binary
+*.webm binary
+*.woff  binary
+*.woff2 binary
+*.ttf   binary
+*.otf   binary
+
+# Lockfiles are generated — collapse them in diffs and reviews.
+package-lock.json linguist-generated=true -diff
+pnpm-lock.yaml    linguist-generated=true -diff
+yarn.lock         linguist-generated=true -diff
