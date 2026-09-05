@@ -8,7 +8,8 @@
  * provider boundary, leaving the collector interface alone.
  */
 
-import { FREE, type MapPackEntry, type Priced, type SerpProvider } from '../../resolve/providers';
+import type { MapPackEntry, Priced, SerpProvider } from '../../resolve/providers';
+import { createScanCache } from '../scan-cache';
 import {
   attempt,
   median,
@@ -33,37 +34,20 @@ export const LOCALRANK_EMITS = [
 /**
  * One purchase per keyword, however many targets ask for it.
  *
- * Wrap the SERP provider once per scan and hand the same instance to every target. The
- * first caller pays and the rest read the same response for free, which is what
- * `collector_runs.cost_pence` should show, because it is what happened.
- *
- * Concurrent callers share the in-flight request rather than racing into two purchases.
- * A failed query is evicted so a later target can retry rather than inheriting the error.
+ * Wrap the SERP provider once per scan and hand the same instance to every target. See
+ * `../scan-cache.ts` for what the wrapper guarantees; `aivis` uses the same mechanism for
+ * the same reason.
  */
 export function scanSerpCache(serp: SerpProvider): SerpProvider {
-  const packs = new Map<string, Promise<Priced<MapPackEntry[]>>>();
-  const charged = new Set<string>();
+  const cached = createScanCache(
+    (request: { keyword: string; near: { lat: number; lng: number } }) =>
+      serp.mapPack(request.keyword, request.near),
+    ({ keyword, near }) => `${keyword.trim().toLowerCase()}@${near.lat},${near.lng}`,
+  );
 
   return {
     name: `${serp.name}+scan-cache`,
-
-    async mapPack(keyword, near): Promise<Priced<MapPackEntry[]>> {
-      const key = `${keyword.trim().toLowerCase()}@${near.lat},${near.lng}`;
-
-      let pending = packs.get(key);
-      if (!pending) {
-        pending = serp.mapPack(keyword, near).catch((cause: unknown) => {
-          packs.delete(key);
-          throw cause;
-        });
-        packs.set(key, pending);
-      }
-
-      const { value, cost } = await pending;
-      if (charged.has(key)) return { value, cost: FREE };
-      charged.add(key);
-      return { value, cost };
-    },
+    mapPack: (keyword, near): Promise<Priced<MapPackEntry[]>> => cached({ keyword, near }),
   };
 }
 

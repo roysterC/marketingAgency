@@ -41,6 +41,10 @@ These came out of the design and are load-bearing. Breaking them breaks the prod
    LLM-invented finding types. This is what keeps reports consistent and benchmarks possible.
 2. **The LLM writes, it does not fetch.** The analysis layer reasons over structured findings
    only. It never retrieves facts. A hallucinated competitor stat in a £1,000 report is fatal.
+   `aivis` calls LLM APIs, and that is the other side of this rule rather than an exception to
+   it: there the model is the thing being *measured*, not the analyst. Its answers become
+   findings through the same closed taxonomy as any other source, and are never treated as
+   true — the most valuable case is precisely when a model is wrong.
 3. **Raw captures are stored separately from findings.** Collectors persist raw responses;
    a separate normalise step maps raw → findings. Rules will change constantly and re-buying
    data is expensive — re-normalisation must be free.

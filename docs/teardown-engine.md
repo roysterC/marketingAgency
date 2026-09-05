@@ -1,7 +1,7 @@
 # Build spec — Research & Teardown Engine
 
-**Phase 1.** Status: in progress. Schema, taxonomy, resolve and five of the six collectors are
-built — `aivis`, analyse and render remain. See the build order in §9.
+**Phase 1.** Status: in progress. Schema, taxonomy, resolve and **all six collectors** are
+built. Analyse and render remain, then the run on 10 real businesses. See §9.
 
 ---
 
@@ -116,7 +116,7 @@ LLM writes the narrative over the structured findings.
 | `sitetech` | Own crawl + PageSpeed Insights | CWV, mobile, indexation, schema, titles, broken links |
 | `citations` | Directory lookups | NAP consistency across directories |
 | `speedtolead` | Live test — see §4 | Measured response time, form health |
-| `aivis` | LLM APIs | Citation presence across buying prompts |
+| `aivis` | LLM APIs — the model is the subject, see below | Citation share, competitor citations, incorrect claims, entity presence |
 
 ### DTC-only
 
@@ -207,6 +207,29 @@ can rank second for a how-to article it wrote years ago while being invisible fo
 the area, and letting that into the median turns a position of 5 into 3.5 — flattering the
 number the whole section rests on. Directories are excluded from "outranked by a competitor" for
 the same reason: a plumber does not lose work to Checkatrade.
+
+### `aivis` and rule 2
+
+CLAUDE.md rule 2 says the LLM writes and does not fetch. `aivis` calls LLM APIs, and that reads
+like a contradiction until you notice which side of the rule it sits on: **here the model is the
+thing being measured, not the analyst.**
+
+We ask ChatGPT what it says about plumbers in Wandsworth and store the answer as raw data, the
+same way `gbp` stores what Places returned. What rule 2 forbids is the *analysis* layer
+retrieving facts to put in the narrative. Nothing here does that — these answers become findings
+through the same closed taxonomy as every other source, and a model's claim is never treated as
+true. The most valuable case is precisely when it is false.
+
+`AIVIS_OUTDATED_FACT` is that case, and the taxonomy calls it the most attention-getting finding
+in the report: a model telling a customer the wrong phone number is concrete, checkable in ten
+seconds, and something almost nobody thinks to look for. It is also the rule most able to
+embarrass *us*, so it only ever compares against a fact we actually hold, and it compares
+loosely enough that `020 8000 2222` and `+442080002222` are the same number. Stating hours we
+never learned is unverifiable, not wrong — the same discipline as the warm-only `gbp` fields.
+
+Prompts are a scan-level purchase, cached exactly like `localrank`'s keywords. The entity check
+is not: it asks about one named business, so caching it would hand every business the first
+one's answer.
 
 ---
 
@@ -402,8 +425,8 @@ PDF export, outbound automation, client-facing UI.
    moved to the adapter, see §7
 5. ✅ `localrank`
 6. ✅ `speedtolead` — the conversion mechanic. Ethics enforced in code, see §4
-7. `aivis` ← **next** — the differentiator
-8. Analyse + render
+7. ✅ `aivis` — the differentiator. See the rule-2 note in §3
+8. Analyse + render ← **next**
 9. Run on 10 real businesses; iterate on report quality, not on code
 
 ---
