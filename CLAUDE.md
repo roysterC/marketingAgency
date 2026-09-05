@@ -85,11 +85,17 @@ identical timestamps: nothing downstream could ever tell them apart.
 
 **Sending is deferred as of 2026-09-06.** A decision about the social implications of contacting
 real businesses at outbound volume, not a technical one — revisit rather than treat as settled.
-The collector and the guard stay built and tested; the `SpeedToLeadProbe` adapter that would
-actually send is simply not written. It is not a blocker: collectors fail independently, so a
-scan runs without it. It does cost the report its sharpest finding, and
-[`docs/teardown-engine.md`](docs/teardown-engine.md) §1 and §4 record the consequence and what
-carries the conversion mechanic instead.
+
+What runs instead is a **read-only probe**
+([`lib/adapters/speedtolead.ts`](lib/adapters/speedtolead.ts)) that contacts nobody and
+establishes the two codes needing only a look at the site — `STL_NO_FORM_ON_SITE` and
+`STL_NO_PHONE_VISIBLE_MOBILE`. It never reports a form as working, and the collector only
+submits when a form reads `ok`, so the sending path is structurally unreachable rather than
+merely unused.
+
+Not a blocker: collectors fail independently and a scan runs regardless. It does cost the report
+its sharpest finding, and [`docs/teardown-engine.md`](docs/teardown-engine.md) §1 and §4 record
+the consequence and what carries the conversion mechanic instead.
 
 ## Stack
 

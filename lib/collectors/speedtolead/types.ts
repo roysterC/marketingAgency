@@ -49,12 +49,24 @@ export interface ContactSurfaces {
   /**
    * Whether the form actually accepted a submission.
    *
-   * Null when there is no form to try. `broken` is the single most valuable finding the
-   * engine can produce — the business is paying for traffic into a dead end.
+   * Null means **not established**, which happens two ways: there was no form to try, or
+   * the probe does not submit. A read-only probe always reports null here, and that is
+   * load-bearing — the collector only submits when this reads `ok`, so a probe that never
+   * claims a form works is never asked to send anything.
+   *
+   * `broken` is the single most valuable finding the engine can produce — the business is
+   * paying for traffic into a dead end — and it cannot be established without submitting.
    */
   form_status: 'ok' | 'broken' | null;
   form_error: string | null;
-  /** A tap-to-call number visible without scrolling, at a 375px viewport. */
+  /**
+   * A tap-to-call number visible without scrolling, at a 375px viewport.
+   *
+   * A read-only probe cannot see the fold, so it reads this as the weaker "a tap-to-call
+   * link exists at all". That can only under-report: no `tel:` link anywhere means there is
+   * definitely nothing tappable above the fold, while a link in the footer is left alone
+   * rather than guessed at. False negatives are acceptable here; false positives are not.
+   */
   phone_visible_mobile: boolean;
   screenshot_key: string | null;
 }

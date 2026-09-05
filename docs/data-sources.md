@@ -112,28 +112,43 @@ for. It should never surface as a 401 halfway through a scan that has already sp
 | `AivisProvider` | `lib/adapters/aivis.ts` | Claude via SDK, GPT and Perplexity via the chat-completions shape |
 | `NarrativeWriter` | `lib/adapters/writer.ts` | Claude with a structured output schema |
 | `SiteCrawler` | `lib/adapters/crawler.ts` | Fetch + HTML parse. Nine of thirteen sitetech codes; no browser |
-| `SpeedToLeadProbe` | **not built** | Needs a monitored inbox and number. See below |
+| `SpeedToLeadProbe` | `lib/adapters/speedtolead.ts` | **Read-only.** Two of seven codes; contacts nobody. Sending deferred — see below |
 
 Every one of them takes an injectable `fetch` or client, so the whole set is tested without
 a network call or a key.
 
-### The one that is deliberately not built
+### The read-only speed-to-lead probe
 
-**`SpeedToLeadProbe`** — deferred 2026-09-06, and not for a technical reason.
+Sending enquiries is deferred (2026-09-06) on social grounds rather than technical ones. What
+runs instead is a probe that **contacts nobody** and establishes the two codes that only need
+looking at a site:
 
-It is the adapter that puts an enquiry in a real business's inbox. The decision to hold off is
-about the social implications of doing that at outbound volume to people who never asked to be
-part of this. It is a judgement call, it is revisitable, and nothing has been deleted to make
-it: the collector, the seven taxonomy codes, the 48-hour window handling and `ethics.ts` are
-all built and tested against fixtures. Only the sender is absent.
+| Code | Established by |
+|---|---|
+| `STL_NO_FORM_ON_SITE` | Is there a form a customer could write through? |
+| `STL_NO_PHONE_VISIBLE_MOBILE` | Is there a `tel:` link to tap? |
+| The other five | Sending an enquiry or placing a call — not built |
 
-Two smaller points worth carrying forward when it is picked up again:
+**The safety property is structural, not a promise.** `inspect()` reports
+`form_status: null` — *not established* — and the collector only calls `submit()` when that
+reads `ok`. The sending path is never entered rather than entered and refused. `submit()`
+throws anyway as a second line, and `call` is simply absent so the phone test is never
+attempted. A test asserts the collector produces no submission, no response window and no
+phone test against a site that has a working-looking form.
 
-- It should not exist before the monitored inbox and phone number in `.env.example` do. The
-  ethics guard checks that an identity was *configured*, not that anyone is *reading* it —
-  so the sender alone would make it possible to contact two hundred businesses from an address
-  nobody answers.
-- **Two of the seven codes need no contact at all.** `STL_NO_FORM_ON_SITE` and
-  `STL_NO_PHONE_VISIBLE_MOBILE` come from looking at the site, which the crawler already does.
-  A read-only probe implementing `inspect()` and leaving `submit()` unimplemented would produce
-  those two with none of the social exposure. That option is unaffected by this decision.
+Two deliberate weakenings, both in the direction of under-reporting:
+
+- **A form is never reported as working.** That takes sending. `STL_FORM_BROKEN` — the most
+  valuable code the engine has — stays unreachable.
+- **The fold cannot be seen.** `phone_visible_mobile` is read as "a `tel:` link exists at
+  all", so a number buried in the footer clears the finding. No link anywhere means there is
+  definitely nothing tappable above the fold, which is the only direction it can be certain in.
+
+Detecting a form at all needs care: a search box is not a contact form, and neither is a lone
+email input, or `STL_NO_FORM_ON_SITE` would never fire on the many sites that have a newsletter
+box and no way to reach anyone.
+
+When sending is picked up again, one thing to carry forward: the sender must not exist before
+the monitored inbox and phone number in `.env.example` do. The ethics guard checks that an
+identity was *configured*, not that anyone is *reading* it — so a sender alone would make it
+possible to contact two hundred businesses from an address nobody answers.

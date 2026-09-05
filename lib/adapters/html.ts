@@ -153,6 +153,93 @@ export function resolveUrl(href: string, base: string): string | null {
   }
 }
 
+// ------------------------------------------------ contact surfaces (read-only)
+
+/** Names that mark a single-field form as a search box rather than a way to reach anyone. */
+const SEARCH_NAMES = new Set(['s', 'q', 'query', 'search', 'keyword', 'keywords']);
+
+/** Text and hrefs that suggest a page exists for getting in touch. */
+const CONTACT_HINT = /contact|get[-\s_]?in[-\s_]?touch|enquir|inquir|quote|book/i;
+
+const inputsOf = (form: HTMLElement): HTMLElement[] => [
+  ...form.querySelectorAll('input'),
+  ...form.querySelectorAll('textarea'),
+  ...form.querySelectorAll('select'),
+];
+
+/**
+ * Whether a form is a search box.
+ *
+ * Excluded before anything else, because "this site has a form" is otherwise true of
+ * almost every WordPress theme ever shipped, and `STL_NO_FORM_ON_SITE` would never fire.
+ */
+export function looksLikeSearch(form: HTMLElement): boolean {
+  if ((form.getAttribute('role') ?? '') === 'search') return true;
+  if (form.querySelector('input[type="search"]')) return true;
+
+  const fields = inputsOf(form).filter(
+    (f) => (f.getAttribute('type') ?? '').toLowerCase() !== 'hidden',
+  );
+  if (fields.length > 1) return false;
+
+  const name = (fields[0]?.getAttribute('name') ?? '').toLowerCase();
+  return SEARCH_NAMES.has(name);
+}
+
+/**
+ * Whether a form is somewhere a customer could actually write to you.
+ *
+ * A textarea is the strongest signal — nobody puts one on a newsletter box. Failing that,
+ * an email field alongside at least one other real field. A lone email input is a mailing
+ * list signup, and counting it would mean never reporting a site that has no contact form.
+ */
+export function isContactForm(form: HTMLElement): boolean {
+  if (looksLikeSearch(form)) return false;
+  if (form.querySelector('textarea')) return true;
+
+  const fields = inputsOf(form).filter(
+    (f) => !['hidden', 'submit', 'button'].includes((f.getAttribute('type') ?? '').toLowerCase()),
+  );
+  const hasEmail = fields.some((f) => {
+    const type = (f.getAttribute('type') ?? '').toLowerCase();
+    const name = `${f.getAttribute('name') ?? ''} ${f.getAttribute('id') ?? ''}`.toLowerCase();
+    return type === 'email' || /e-?mail/.test(name);
+  });
+
+  return hasEmail && fields.length >= 2;
+}
+
+/** Whether the page carries a form a customer could send an enquiry through. */
+export function hasContactForm(root: HTMLElement): boolean {
+  return root.querySelectorAll('form').some(isContactForm);
+}
+
+/**
+ * Whether the page offers a tap-to-call number.
+ *
+ * Anywhere on the page, not above the fold — see the note on `phone_visible_mobile`. This
+ * can only under-report, which is the right direction to be wrong in.
+ */
+export function hasTapToCall(root: HTMLElement): boolean {
+  return root
+    .querySelectorAll('a[href]')
+    .some((a) => /^tel:/i.test(a.getAttribute('href')?.trim() ?? ''));
+}
+
+/** Links that look like they lead to a contact page. Most sites do not put the form home. */
+export function contactPageLinks(root: HTMLElement): string[] {
+  const found: string[] = [];
+
+  for (const anchor of root.querySelectorAll('a[href]')) {
+    const href = anchor.getAttribute('href')?.trim();
+    if (!href || href.startsWith('#')) continue;
+    if (/^(mailto|tel|javascript|data):/i.test(href)) continue;
+    if (CONTACT_HINT.test(href) || CONTACT_HINT.test(anchor.textContent ?? '')) found.push(href);
+  }
+
+  return [...new Set(found)];
+}
+
 /** Sitemap locations named in a sitemap index or a robots file. */
 export function sitemapUrlsFrom(xml: string): string[] {
   const matches = xml.matchAll(/<loc>\s*([^<\s]+)\s*<\/loc>/gi);

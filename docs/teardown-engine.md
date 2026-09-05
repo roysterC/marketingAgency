@@ -1,9 +1,9 @@
 # Build spec — Research & Teardown Engine
 
-**Phase 1.** Status: in progress. The pipeline is built end to end, with real adapters for
-every source but one — see [`data-sources.md`](data-sources.md#adapters). Sending speed-to-lead
-enquiries is **deferred**, deliberately and not for technical reasons (§4). What remains is keys
-and the run on 10 real businesses. See §9.
+**Phase 1.** Status: in progress. The pipeline is built end to end and every source has a real
+adapter — see [`data-sources.md`](data-sources.md#adapters). `speedtolead` runs read-only:
+sending enquiries is **deferred**, deliberately and not for technical reasons (§4). What remains
+is keys and the run on 10 real businesses. See §9.
 
 ---
 
@@ -142,7 +142,7 @@ render step calls it rather than trusting a caller to have done so.
 | `reviews` | Reviews API — Places alone covers 2 of 6, see below | Volume, velocity, rating, recency, response rate, unanswered negatives |
 | `sitetech` | Own crawl + PageSpeed Insights | CWV, mobile, indexation, schema, titles, broken links |
 | `citations` | Directory lookups | NAP consistency across directories |
-| `speedtolead` | Live test — **sending deferred, see §4** | Measured response time, form health |
+| `speedtolead` | Site inspection; live test **deferred, see §4** | Form and tap-to-call presence. Response time needs sending |
 | `aivis` | LLM APIs — the model is the subject, see below | Citation share, competitor citations, incorrect claims, entity presence |
 
 ### DTC-only
@@ -269,11 +269,14 @@ one's answer.
 > against fixtures. The missing piece is `SpeedToLeadProbe`, the adapter that would put an
 > enquiry in someone's inbox.
 >
-> Two of the seven codes need no contact at all and could be produced by a read-only probe that
-> only looks at the site: `STL_NO_FORM_ON_SITE` and `STL_NO_PHONE_VISIBLE_MOBILE`. That option
-> is open and is not affected by this decision.
+> Two of the seven codes need no contact at all, and those **are** running: a read-only probe
+> establishes `STL_NO_FORM_ON_SITE` and `STL_NO_PHONE_VISIBLE_MOBILE` by looking at the site.
+> It never reports a form as working, which is what gates submission, so the sending path is
+> structurally unreachable rather than merely unused. See
+> [`data-sources.md`](data-sources.md#the-read-only-speed-to-lead-probe).
 >
-> Revisit when there is a monitored inbox and a settled view on the mystery-shop question.
+> Revisit sending when there is a monitored inbox and a settled view on the mystery-shop
+> question.
 
 This collector contacts real businesses. That makes it the highest-value module and the one
 with a real ethical line running through it.
@@ -457,8 +460,8 @@ noise, and it's still viable at cold-outbound volume.
 Cut hard. Ship this, then extend.
 
 - **One vertical** (trades or clinics), UK, cold mode only
-- **Five collectors running:** `gbp`, `localrank`, `reviews`, `sitetech`, `aivis`.
-  `speedtolead` is built but not wired to a sender — see §4
+- **Six collectors running**, but `speedtolead` read-only: it produces two of its seven codes
+  and contacts nobody. See §4
 - LLM narrative + HTML report
 - Manual scan trigger from a simple internal dashboard — no self-serve, no auth, no billing
 
