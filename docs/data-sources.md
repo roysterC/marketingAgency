@@ -101,6 +101,19 @@ other fails the build rather than someone else's first scan.
 A missing required key fails at adapter construction, naming the variable and what it is
 for. It should never surface as a 401 halfway through a scan that has already spent money.
 
+`.env` is loaded by `loadDotEnv()`, which wraps Node's built-in `process.loadEnvFile` — no
+dotenv dependency. A value already in the environment wins over the file, so a key exported in
+the shell or injected by a host is not silently overridden by a stale local copy.
+
+```bash
+npm run check:keys           # which are set, and shape problems like stray quotes
+npm run check:keys -- --live # one real call per provider — a few pence in total
+```
+
+The `--live` pass earns its place because "the variable is set" and "the key works" are
+different facts, and the gap between them otherwise surfaces mid-scan, after the providers
+earlier in the run have already been paid. It never prints a value.
+
 ## Adapters
 
 | Interface | Adapter | Notes |

@@ -134,7 +134,13 @@ npm run check          # all three of the below
 npm run typecheck      # tsc --noEmit
 npm run check:taxonomy # findings.ts <-> finding-taxonomy.md <-> SQL CHECK constraints
 npm test               # node:test via tsx
+
+npm run check:keys           # which credentials are set. No network, no spend
+npm run check:keys -- --live # one real call per provider to prove each key works
 ```
+
+`check:keys` is separate from `check` on purpose: the test suite must keep passing with no
+`.env` at all. It never prints a credential — not truncated, not masked, not a length.
 
 `check:taxonomy` is what makes "keep docs current" enforceable rather than aspirational. It
 fails if a finding code, its severity or its confidence differs between the registry and the

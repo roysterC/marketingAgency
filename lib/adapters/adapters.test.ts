@@ -1,8 +1,17 @@
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 
-import { CREDENTIALS, MissingCredential, missingCredentials, optional, required } from './config';
+import {
+  CREDENTIALS,
+  MissingCredential,
+  loadDotEnv,
+  missingCredentials,
+  optional,
+  required,
+} from './config';
 import {
   createPlacesProvider,
   domainOf,
@@ -99,6 +108,31 @@ describe('credentials', () => {
     for (const line of example.split('\n')) {
       if (line.startsWith('#') || line.trim() === '') continue;
       assert.match(line, /=$/, `"${line}" looks like it has a value committed to it`);
+    }
+  });
+
+  test('loading a .env is silent when there is not one', () => {
+    // The whole test suite runs without one, which is the point of every provider having a
+    // fixture behind the same interface.
+    assert.equal(loadDotEnv('does-not-exist.env'), false);
+  });
+
+  test('a value already in the environment beats the file', () => {
+    // A key exported in the shell or injected by a host must not be silently overridden by
+    // a stale local file.
+    const dir = mkdtempSync(join(tmpdir(), 'env-'));
+    const file = join(dir, '.env');
+    writeFileSync(file, ['MA_TEST_ONLY_FILE=from_file', 'MA_TEST_ONLY_BOTH=from_file', ''].join('\n'));
+
+    process.env.MA_TEST_ONLY_BOTH = 'from_shell';
+    try {
+      assert.equal(loadDotEnv(file), true);
+      assert.equal(process.env.MA_TEST_ONLY_FILE, 'from_file');
+      assert.equal(process.env.MA_TEST_ONLY_BOTH, 'from_shell');
+    } finally {
+      delete process.env.MA_TEST_ONLY_FILE;
+      delete process.env.MA_TEST_ONLY_BOTH;
+      rmSync(dir, { recursive: true, force: true });
     }
   });
 

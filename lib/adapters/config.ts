@@ -11,6 +11,25 @@
  * the variable rather than as a 401 halfway through a paid scan.
  */
 
+/**
+ * Load `.env` into `process.env`, if there is one.
+ *
+ * Node has done this natively since 20, so there is no dotenv dependency. Values already in
+ * the environment win — a key exported in the shell or injected by a host should not be
+ * silently overridden by a stale local file.
+ *
+ * Missing is fine and silent: the test suite runs with no `.env` at all, which is the point
+ * of every provider having a fixture behind the same interface.
+ */
+export function loadDotEnv(path = '.env'): boolean {
+  try {
+    process.loadEnvFile(path);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 export class MissingCredential extends Error {
   readonly variable: string;
 

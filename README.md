@@ -96,8 +96,16 @@ client, rather than into features:
 
 ## Next step
 
-**Run it on 10 real local businesses.** That needs keys in `.env` — see
-[`.env.example`](.env.example), which documents every variable and what it is for.
+**Run it on 10 real local businesses.** That needs keys in `.env` — copy
+[`.env.example`](.env.example), which documents every variable and what it is for, then:
+
+```bash
+npm run check:keys -- --live
+```
+
+Four are required: `GOOGLE_PLACES_API_KEY`, `DATAFORSEO_LOGIN`, `DATAFORSEO_PASSWORD` and
+`ANTHROPIC_API_KEY`. The speed-to-lead identity variables are not needed while sending is
+deferred.
 
 The four ship criteria are in the [spec](docs/teardown-engine.md#9-phase-1-mvp), and none of them
 can be signed off from here. One is budgeted rather than met — a scan is costed at £1.50–2.65
