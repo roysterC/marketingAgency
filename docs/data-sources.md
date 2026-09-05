@@ -43,7 +43,7 @@ strongest local finding the engine produces — reachable in cold mode. Not a cl
 
 ## Cost per cold SMB scan
 
-1 subject + 5 competitors: **~£1.45 – 2.60**. DTC adds ~£1. Budget **£2–5**.
+1 subject + 5 competitors: **~£1.50 – 2.65**. DTC adds ~£1. Budget **£2–5**.
 
 Track actuals in `collector_runs.cost_pence` from day one — the cold-outbound economics depend
 on this number staying low, and it will drift as collectors get added.

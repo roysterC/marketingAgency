@@ -6,8 +6,8 @@ The build for an AI-first marketing agency run by a solo technical founder. Sell
 not hours.
 
 **Current phase: A1 — the Research & Teardown Engine.** The specs are complete. Schema,
-taxonomy, the resolve stage and the `gbp`, `reviews`, `sitetech` and `localrank` collectors are
-built; `speedtolead`, `aivis`, analyse and render are not.
+taxonomy, the resolve stage and five of the six collectors are built; `aivis`, analyse and
+render are not.
 
 The roadmap runs two tracks: **A (Product)** is sequential and self-paced; **B (Delivery)** is
 triggered by client signings and interrupts A. A paying client outranks the next tool.
@@ -41,7 +41,7 @@ resolve  →  collect  →  normalise  →  analyse  →  render
 ## Next step
 
 Phase 1 MVP, in order — schema + taxonomy ✅ → resolve ✅ → `gbp` ✅ → `reviews` ✅ →
-`sitetech` ✅ → `localrank` ✅ → **`speedtolead` ←** → `aivis` → analyse + render → run on 10
+`sitetech` ✅ → `localrank` ✅ → `speedtolead` ✅ → **`aivis` ←** → analyse + render → run on 10
 real businesses.
 
 Ship criteria and the full cut are in the [spec](docs/teardown-engine.md#9-phase-1-mvp).

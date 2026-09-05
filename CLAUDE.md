@@ -70,6 +70,12 @@ identified** — a real question from a named inbox ("do you cover SW18? what's 
 fee?"). Never a fabricated job that wastes someone's time. This is a mystery shop, not a fake
 lead. See the collector notes in the spec.
 
+**This is enforced, not advised** — same principle as rule 7.
+[`lib/collectors/speedtolead/ethics.ts`](lib/collectors/speedtolead/ethics.ts) refuses an
+enquiry that is anonymous, unattributable, or booking work that does not exist, and it is the
+only path to a submission. It has to be code because a fake lead and a mystery shop produce
+identical timestamps: nothing downstream could ever tell them apart.
+
 ## Stack
 
 - **Next.js (App Router)** — dashboard, API, report rendering

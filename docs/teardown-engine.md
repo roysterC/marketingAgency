@@ -1,7 +1,7 @@
 # Build spec — Research & Teardown Engine
 
-**Phase 1.** Status: in progress. Schema, taxonomy, resolve and the `gbp`, `reviews`,
-`sitetech` and `localrank` collectors are built — see the build order in §9 for what remains.
+**Phase 1.** Status: in progress. Schema, taxonomy, resolve and five of the six collectors are
+built — `aivis`, analyse and render remain. See the build order in §9.
 
 ---
 
@@ -210,7 +210,7 @@ the same reason: a plumber does not lose work to Checkatrade.
 
 ---
 
-## 4. The `speedtolead` collector — read before building
+## 4. The `speedtolead` collector — read before changing
 
 This collector contacts real businesses. That makes it the highest-value module and the one
 with a real ethical line running through it.
@@ -232,6 +232,31 @@ Implementation constraints:
 - If the form errors, that's `STL_FORM_BROKEN` — the single most valuable finding the engine
   can produce
 - In warm mode the client has consented, so none of this applies
+
+### Where the rule is enforced
+
+In [`lib/collectors/speedtolead/ethics.ts`](../lib/collectors/speedtolead/ethics.ts), not here.
+
+The reason it needs code rather than a paragraph is that **the measurement is identical either
+way.** A mystery shop and a fabricated job produce the same two timestamps; nothing downstream
+can tell them apart, and no test of the output would ever catch the difference. The only place
+the distinction exists is in what we sent — so that is the only place it can be checked.
+
+`assertGenuineEnquiry` refuses an enquiry with no named sender, no monitored reply address or
+phone, no disclosure of who is asking, or a question that is not a question. It also refuses
+phrasings that book work rather than ask something — a backstop for the likely mistake, not a
+substitute for judgement when the enquiry text is written. `dispatchEnquiry` is the only path to
+a submission and validates first, and the collector runs the same check at construction, so a
+misconfigured identity stops before the first business is touched rather than after.
+
+The one-test-per-business limit is a ledger in the collector, which is what makes `collect()`
+safe to call twice: the enquiry goes out in minutes and the answer comes back in hours, so the
+stage runs once to submit and again after the wait. The second run polls the inbox and writes to
+nobody.
+
+Silence is handled the same way. `window_closes_at` is what separates "they have not replied
+yet" from "they never replied" — before it, a quiet business produces no finding at all, because
+reporting it would be reporting our own impatience as their failure.
 
 ---
 
@@ -339,9 +364,10 @@ Cold SMB scan, 1 subject + 5 competitors:
 | SERP API (10 keywords) | ~£0.30 — per scan, not per target |
 | PageSpeed Insights | free |
 | Own crawl | negligible |
+| Speed-to-lead test (form probe + one call) | ~£0.03 |
 | AI visibility (8 prompts × 3 models) | ~£0.30 |
 | LLM analysis (~150k in / 15k out) | ~£0.60 |
-| **Total** | **~£1.45 – 2.60** |
+| **Total** | **~£1.50 – 2.65** |
 
 DTC adds ad-library data (~£1). Budget **£2–5 per scan**. Against a £500–1,500 product that is
 noise, and it's still viable at cold-outbound volume.
@@ -375,8 +401,8 @@ PDF export, outbound automation, client-facing UI.
 4. ✅ `sitetech` — written behind a crawler interface; the Playwright deployment decision
    moved to the adapter, see §7
 5. ✅ `localrank`
-6. `speedtolead` ← **next** — the conversion mechanic
-7. `aivis` — the differentiator
+6. ✅ `speedtolead` — the conversion mechanic. Ethics enforced in code, see §4
+7. `aivis` ← **next** — the differentiator
 8. Analyse + render
 9. Run on 10 real businesses; iterate on report quality, not on code
 
