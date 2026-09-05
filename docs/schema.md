@@ -180,9 +180,26 @@ whole report.
 
 ## Validation before render
 
-Hard gate, not a warning:
+Hard gate, not a warning. Implemented in
+[`lib/analyse/validate.ts`](../lib/analyse/validate.ts), and called by the render step itself
+rather than by whoever remembers — there is no path from a claim we cannot defend to a document
+a prospect reads.
 
-- Every narrative claim references a real `finding_id`
-- No finding with `confidence = 'estimated'` is phrased as fact
-- No benchmark cited where `sample_size < 20`
-- Every `critical` finding has renderable evidence
+| Violation | Check |
+|---|---|
+| `UNREFERENCED_CLAIM` | Every narrative claim references a real `finding_id` on this scan |
+| `ESTIMATE_AS_FACT` | No `estimated` finding is phrased as measured fact |
+| `THIN_BENCHMARK_CITED` | No `vertical_p50` benchmark cited below `sample_size` 20 |
+| `CRITICAL_WITHOUT_EVIDENCE` | Every `critical` finding has something a reader can check |
+| `CRITICAL_UNREPORTED` | Every `critical` finding **about the subject** appears in the narrative |
+| `RECOMMENDATION_WITHOUT_FINDING` | Every recommendation is justified by findings |
+
+The last two are additions to the original four. `CRITICAL_UNREPORTED` catches a report that
+quietly omits its own worst finding — the model ranked it away, and nothing else would notice.
+`RECOMMENDATION_WITHOUT_FINDING` is the same rule as an unreferenced claim, applied to the
+half of the output that tells a client what to do.
+
+`ESTIMATE_AS_FACT` is the only one that cannot be exact. It requires a claim resting on an
+estimated finding to carry hedging language, which is a backstop rather than a judgement of
+whether a sentence overstates its evidence. A false positive costs a rewrite; a false negative
+costs a claim we cannot defend, so it errs towards the rewrite.

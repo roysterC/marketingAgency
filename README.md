@@ -5,9 +5,9 @@
 The build for an AI-first marketing agency run by a solo technical founder. Sells **systems**,
 not hours.
 
-**Current phase: A1 — the Research & Teardown Engine.** The specs are complete. Schema,
-taxonomy, the resolve stage and all six collectors are built. Analyse and render are not, and
-nothing has run against a real business yet.
+**Current phase: A1 — the Research & Teardown Engine.** The pipeline is built end to end on
+fixtures — resolve, six collectors, analyse and render. No real API adapters yet, and nothing has
+run against a real business.
 
 The roadmap runs two tracks: **A (Product)** is sequential and self-paced; **B (Delivery)** is
 triggered by client signings and interrupts A. A paying client outranks the next tool.
@@ -41,7 +41,11 @@ resolve  →  collect  →  normalise  →  analyse  →  render
 ## Next step
 
 Phase 1 MVP, in order — schema + taxonomy ✅ → resolve ✅ → `gbp` ✅ → `reviews` ✅ →
-`sitetech` ✅ → `localrank` ✅ → `speedtolead` ✅ → `aivis` ✅ → **analyse + render ←** → run on
-10 real businesses.
+`sitetech` ✅ → `localrank` ✅ → `speedtolead` ✅ → `aivis` ✅ → analyse + render ✅ →
+**run on 10 real businesses ←**.
+
+That last step needs the real provider adapters and the Playwright deployment decision in
+[spec §7](docs/teardown-engine.md#7-stack). Every stage currently runs on fixtures, with no keys
+and no spend.
 
 Ship criteria and the full cut are in the [spec](docs/teardown-engine.md#9-phase-1-mvp).

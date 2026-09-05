@@ -1,7 +1,8 @@
 # Build spec — Research & Teardown Engine
 
-**Phase 1.** Status: in progress. Schema, taxonomy, resolve and **all six collectors** are
-built. Analyse and render remain, then the run on 10 real businesses. See §9.
+**Phase 1.** Status: in progress. The pipeline is built end to end — schema, taxonomy, resolve,
+all six collectors, analyse and render. What remains is real adapters, the Playwright deployment
+call, and the run on 10 real businesses. See §9.
 
 ---
 
@@ -93,6 +94,16 @@ LLM writes the narrative over the structured findings.
   finding
 - Every claim in the narrative must reference a `finding_id`. Unreferenced claims are a bug —
   validate this before render
+
+Rule 2 is a claim about the *input*, so it is kept true in `lib/analyse/brief.ts`: the brief is
+assembled from findings, the competitor set and the benchmark table, and there is no path from
+`raw_captures` into it. Evidence is reduced to its key names — the renderer needs the values, the
+writer does not, and passing them through would hand a model a page of captured markup to
+paraphrase from. Everything the narrative should say about a measurement is already in
+`measured`.
+
+The gate that runs afterwards is in [`schema.md`](schema.md#validation-before-render), and the
+render step calls it rather than trusting a caller to have done so.
 
 ### 2.5 Render
 
@@ -426,8 +437,10 @@ PDF export, outbound automation, client-facing UI.
 5. ✅ `localrank`
 6. ✅ `speedtolead` — the conversion mechanic. Ethics enforced in code, see §4
 7. ✅ `aivis` — the differentiator. See the rule-2 note in §3
-8. Analyse + render ← **next**
-9. Run on 10 real businesses; iterate on report quality, not on code
+8. ✅ Analyse + render — the pre-render gate is in `lib/analyse/validate.ts`, see
+   [`schema.md`](schema.md#validation-before-render)
+9. Run on 10 real businesses ← **next**; iterate on report quality, not on code. Needs the
+   real provider adapters and the §7 Playwright decision first
 
 ---
 

@@ -168,6 +168,21 @@ export interface Report {
 export interface Narrative {
   executive_summary: NarrativeClaim[];
   sections: NarrativeSection[];
+  /** Prioritised, per spec §2.4. Each one has to be justified by findings. */
+  recommendations: Recommendation[];
+}
+
+/**
+ * What to do about it.
+ *
+ * `finding_ids` is never empty: a recommendation with nothing behind it is the model
+ * inventing work, which is the same failure as an unreferenced claim.
+ */
+export interface Recommendation {
+  action: string;
+  finding_ids: Uuid[];
+  /** 1 is first. */
+  priority: number;
 }
 
 export interface NarrativeSection {
