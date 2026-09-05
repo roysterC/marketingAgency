@@ -62,7 +62,10 @@ These came out of the design and are load-bearing. Breaking them breaks the prod
 8. **Every paid data source sits behind a provider interface.** Real HTTP adapters and fixture
    implementations satisfy the same interface, so a stage runs end to end in tests with no keys
    and no spend. Providers return `Priced<T>`; a `CostMeter` accumulates the total so
-   `scans.cost_pence` reflects reality rather than an estimate.
+   `scans.cost_pence` reflects reality rather than an estimate. Adapters live in
+   [`lib/adapters/`](lib/adapters/) and each takes an injectable `fetch` or client, so they are
+   tested without a network call. Credentials are read in one place, `lib/adapters/config.ts`,
+   and checked against [`.env.example`](.env.example) by a test.
 9. **Shortlist on free signals before paying to enrich.** Map packs return more places than are
    worth a paid details lookup. Rank on data already bought, then enrich the top slice
    (`ENRICH_LIMIT`). This is what keeps a scan inside its £5 budget.

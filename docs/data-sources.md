@@ -15,8 +15,8 @@ This is a settled decision. See `../CLAUDE.md`.
 | Source | Provider | Cost | Status |
 |---|---|---|---|
 | Business listings | Google Places API | ~£0.15/scan | Clean, official |
-| Review history | DataForSEO / equivalent | ~£0.10/scan | Clean. Places alone is not enough — see below |
-| SERP + map pack position | DataForSEO / Serper / SerpAPI | ~£0.30/scan | Clean, pick one. Bought once per scan, not once per target |
+| Review history | DataForSEO | ~£0.10/scan | Clean. Places alone is not enough — see below |
+| SERP + map pack position | DataForSEO | ~£0.30/scan | Clean. Bought once per scan, not once per target |
 | Core Web Vitals | PageSpeed Insights API | Free | Clean, rate-limited |
 | Site crawl | Own Playwright worker | Infra only | Respect `robots.txt` |
 | Tech stack detection | Own — inspect page | Free | Clean |
@@ -75,5 +75,42 @@ genuine, identified enquiries only — a mystery shop, never a fabricated job.
 
 ## Keys and secrets
 
-All provider keys in environment variables, never committed. `.env.example` documents the
-required set without values.
+All provider keys in environment variables, never committed.
+[`.env.example`](../.env.example) documents the required set without values, and
+[`lib/adapters/config.ts`](../lib/adapters/config.ts) is the only place that reads them — a
+test checks the two against each other, so a credential added in one and forgotten in the
+other fails the build rather than someone else's first scan.
+
+A missing required key fails at adapter construction, naming the variable and what it is
+for. It should never surface as a 401 halfway through a scan that has already spent money.
+
+## Adapters
+
+| Interface | Adapter | Notes |
+|---|---|---|
+| `PlacesProvider`, `GbpProvider` | `lib/adapters/places.ts` | One client, two field masks. Places (New) bills by mask, so widening one widens every scan |
+| `ReviewsProvider` | `lib/adapters/dataforseo.ts` | Task-based: post, poll, collect. Falls back to the Places five-review sample |
+| `SerpProvider` | `lib/adapters/dataforseo.ts` | Live endpoint, one call per keyword per scan |
+| `VitalsProvider` | `lib/adapters/pagespeed.ts` | Free, rate-limited. Field data first, lab data as fallback |
+| `AivisProvider` | `lib/adapters/aivis.ts` | Claude via SDK, GPT and Perplexity via the chat-completions shape |
+| `NarrativeWriter` | `lib/adapters/writer.ts` | Claude with a structured output schema |
+| `SiteCrawler` | **not built** | Blocked on the §7 Playwright decision |
+| `SpeedToLeadProbe` | **not built** | Needs a monitored inbox and number. See below |
+
+Every one of them takes an injectable `fetch` or client, so the whole set is tested without
+a network call or a key.
+
+### Two that are deliberately not built
+
+**`SiteCrawler`** is blocked on the browser-service-versus-worker decision in
+[`teardown-engine.md`](teardown-engine.md#7-stack). Worth knowing before making it: nine of
+the thirteen `sitetech` codes — titles, schema, indexation, links, thin content, sitemap,
+HTTPS — need HTTP and an HTML parser, not a browser. A browser is needed for screenshots and
+for sites that render client-side. That makes the decision smaller than it looked, and a
+fetch-based crawler a legitimate first version.
+
+**`SpeedToLeadProbe`** is not blocked on a technical decision. It is the adapter that sends
+the enquiry, and it should not exist before the monitored inbox and phone number in
+`.env.example` do — the ethics guard checks that an identity was configured, not that anyone
+is reading the inbox. Building the sender first would make it possible to contact two hundred
+businesses from an address nobody answers, which is the failure the rule exists to prevent.

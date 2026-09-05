@@ -1,8 +1,9 @@
 # Build spec — Research & Teardown Engine
 
-**Phase 1.** Status: in progress. The pipeline is built end to end — schema, taxonomy, resolve,
-all six collectors, analyse and render. What remains is real adapters, the Playwright deployment
-call, and the run on 10 real businesses. See §9.
+**Phase 1.** Status: in progress. The pipeline is built end to end, with real adapters for
+every source but two — see [`data-sources.md`](data-sources.md#adapters). What remains is the
+site crawler (blocked on §7), the speed-to-lead probe (needs a monitored inbox), and the run on
+10 real businesses. See §9.
 
 ---
 
