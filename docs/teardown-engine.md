@@ -1,9 +1,8 @@
 # Build spec — Research & Teardown Engine
 
 **Phase 1.** Status: in progress. The pipeline is built end to end, with real adapters for
-every source but two — see [`data-sources.md`](data-sources.md#adapters). What remains is the
-site crawler (blocked on §7), the speed-to-lead probe (needs a monitored inbox), and the run on
-10 real businesses. See §9.
+every source but one — see [`data-sources.md`](data-sources.md#adapters). What remains is the
+speed-to-lead probe (needs a monitored inbox), keys, and the run on 10 real businesses. See §9.
 
 ---
 
@@ -366,10 +365,25 @@ percentile.
 Vercel functions. Either use a browser service (Browserless) or run a small always-on worker
 (Fly.io / Railway).
 
-Still open, and no longer blocking. `sitetech` is written against a `SiteCrawler` interface and
-both options return the same thing — rendered HTML, screenshots, timings — so the capture shape
-and every normalise rule hold either way. The decision moved to the adapter, where it has to be
-settled before the crawl first runs against a real site.
+Still open, and now much smaller than it looked. `sitetech` is written against a `SiteCrawler`
+interface, and the adapter behind it — [`lib/adapters/crawler.ts`](../lib/adapters/crawler.ts) —
+is plain HTTP plus an HTML parser. Titles, duplicate titles, schema, indexation, broken links,
+thin content, sitemap and HTTPS are all read out of markup. **Nine of the thirteen codes need no
+browser at all.**
+
+A browser is needed for exactly two things:
+
+1. **Screenshots.** Evidence, not findings. Every finding renders without one; a screenshot
+   makes some of them more persuasive.
+2. **Client-rendered sites.** A marketing site that ships an empty `<body>` and paints itself
+   with JavaScript is unreadable to a fetch. The crawler detects that shape and *refuses*,
+   raising `ClientRenderedSite` — the collector records it in `source_errors` and the section
+   goes missing with a reason. Reporting such a site as having no title, no content and no
+   structured data would be three false findings against a site that is fine.
+
+So the question is no longer "how do we deploy the crawler" but "when do we want screenshots and
+JS-rendered sites". That can wait until the ten real scans show how often the second case comes
+up.
 
 ### Repo layout
 

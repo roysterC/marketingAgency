@@ -68,6 +68,20 @@ The `sitetech` and `store` collectors hit real sites. Non-negotiable:
 - Rate limit per host; a scan should be invisible in someone's access log
 - Never crawl behind auth in cold mode
 
+All four are implemented rather than intended, in
+[`lib/adapters/crawler.ts`](../lib/adapters/crawler.ts) and
+[`lib/adapters/robots.ts`](../lib/adapters/robots.ts), and each has a test.
+
+`contactUrl` is a **required** config field with no default, because "identifiable" is not
+something to leave to a constant someone forgets to change. Robots governs the link checker
+as well as the page walk — a disallowed path goes unchecked, and therefore unreported, since
+calling a link broken without having fetched it would be a fabricated finding.
+
+Note that robots.txt is read for two unrelated purposes and the two must not be confused.
+`isAllowed` in the adapter asks *may we fetch this* — an obligation on us. `blocksEverything`
+in the sitetech normaliser asks *is this site hiding from search engines* — a finding about
+them. A site that shuts us out is still reported as blocked; we simply do not crawl it first.
+
 ## The `speedtolead` exception
 
 This collector contacts real businesses. Ethics rules are in the spec (§4) and are not optional:
@@ -94,20 +108,13 @@ for. It should never surface as a 401 halfway through a scan that has already sp
 | `VitalsProvider` | `lib/adapters/pagespeed.ts` | Free, rate-limited. Field data first, lab data as fallback |
 | `AivisProvider` | `lib/adapters/aivis.ts` | Claude via SDK, GPT and Perplexity via the chat-completions shape |
 | `NarrativeWriter` | `lib/adapters/writer.ts` | Claude with a structured output schema |
-| `SiteCrawler` | **not built** | Blocked on the §7 Playwright decision |
+| `SiteCrawler` | `lib/adapters/crawler.ts` | Fetch + HTML parse. Nine of thirteen sitetech codes; no browser |
 | `SpeedToLeadProbe` | **not built** | Needs a monitored inbox and number. See below |
 
 Every one of them takes an injectable `fetch` or client, so the whole set is tested without
 a network call or a key.
 
-### Two that are deliberately not built
-
-**`SiteCrawler`** is blocked on the browser-service-versus-worker decision in
-[`teardown-engine.md`](teardown-engine.md#7-stack). Worth knowing before making it: nine of
-the thirteen `sitetech` codes — titles, schema, indexation, links, thin content, sitemap,
-HTTPS — need HTTP and an HTML parser, not a browser. A browser is needed for screenshots and
-for sites that render client-side. That makes the decision smaller than it looked, and a
-fetch-based crawler a legitimate first version.
+### The one that is deliberately not built
 
 **`SpeedToLeadProbe`** is not blocked on a technical decision. It is the adapter that sends
 the enquiry, and it should not exist before the monitored inbox and phone number in

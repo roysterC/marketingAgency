@@ -6,9 +6,9 @@ The build for an AI-first marketing agency run by a solo technical founder. Sell
 not hours.
 
 **Current phase: A1 — the Research & Teardown Engine.** The pipeline is built end to end —
-resolve, six collectors, analyse and render — with real adapters for every source except two:
-the site crawler, which is blocked on the Playwright decision, and the speed-to-lead probe,
-which needs a monitored inbox first. Nothing has run against a real business yet.
+resolve, six collectors, analyse and render — with real adapters for every source but one: the
+speed-to-lead probe, which should not exist before the monitored inbox does. Nothing has run
+against a real business yet.
 
 The roadmap runs two tracks: **A (Product)** is sequential and self-paced; **B (Delivery)** is
 triggered by client signings and interrupts A. A paying client outranks the next tool.
@@ -45,9 +45,8 @@ Phase 1 MVP, in order — schema + taxonomy ✅ → resolve ✅ → `gbp` ✅ �
 `sitetech` ✅ → `localrank` ✅ → `speedtolead` ✅ → `aivis` ✅ → analyse + render ✅ →
 **run on 10 real businesses ←**.
 
-That last step needs the two remaining adapters, keys in `.env` (see
-[`.env.example`](.env.example)) and the Playwright deployment decision in
-[spec §7](docs/teardown-engine.md#7-stack). Every stage still runs on fixtures with no keys and
-no spend, which is how the whole test suite works.
+That last step needs the speed-to-lead probe and keys in `.env` (see
+[`.env.example`](.env.example)). Every stage still runs on fixtures with no keys and no spend,
+which is how the whole test suite works.
 
 Ship criteria and the full cut are in the [spec](docs/teardown-engine.md#9-phase-1-mvp).

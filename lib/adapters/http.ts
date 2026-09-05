@@ -161,12 +161,27 @@ export async function requestJson<T>(url: string, options: RequestOptions = {}):
   throw lastError instanceof Error ? lastError : new Error(`Request failed: ${url}`);
 }
 
-/** Fetch a page as text rather than JSON. Used by the crawler and robots.txt lookups. */
+export interface TextResponse {
+  status: number;
+  text: string;
+  /** After redirects. What HTTPS is judged on. */
+  finalUrl: string;
+  /** Read for `X-Robots-Tag`: a page can be noindexed by header with clean markup. */
+  headers: Headers;
+}
+
+/**
+ * Fetch a page as text rather than JSON.
+ *
+ * No retries and no throwing on a non-2xx: the crawler *wants* the 404, because a dead
+ * page is the finding. Only a transport failure or a timeout raises.
+ */
 export async function requestText(
   url: string,
   options: RequestOptions = {},
-): Promise<{ status: number; text: string; finalUrl: string }> {
+): Promise<TextResponse> {
   const {
+    method = 'GET',
     timeoutMs = DEFAULT_TIMEOUT_MS,
     headers = {},
     fetchImpl = fetch,
@@ -177,6 +192,7 @@ export async function requestText(
 
   try {
     const response = await fetchImpl(url, {
+      method,
       headers: { ...headers },
       redirect: 'follow',
       signal: controller.signal,
@@ -185,6 +201,7 @@ export async function requestText(
       status: response.status,
       text: await response.text(),
       finalUrl: response.url || url,
+      headers: response.headers,
     };
   } catch (cause) {
     if (cause instanceof Error && cause.name === 'AbortError') throw new HttpTimeout(url, timeoutMs);
