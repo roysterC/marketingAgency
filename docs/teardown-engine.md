@@ -1,6 +1,7 @@
 # Build spec — Research & Teardown Engine
 
-**Phase 1.** Status: specced, not started.
+**Phase 1.** Status: in progress. Schema, taxonomy, resolve and `gbp` are built — see the
+build order in §9 for what remains.
 
 ---
 
@@ -303,9 +304,9 @@ PDF export, outbound automation, client-facing UI.
 
 ### Build order within the phase
 
-1. Schema + taxonomy + finding types — everything else depends on these
-2. Resolve stage + competitor selection
-3. `gbp` and `reviews` (cheapest to verify, immediate signal)
+1. ✅ Schema + taxonomy + finding types — everything else depends on these
+2. ✅ Resolve stage + competitor selection
+3. ✅ `gbp`, then `reviews` ← **next** (cheapest to verify, immediate signal)
 4. `sitetech` — forces the Playwright deployment decision
 5. `localrank`
 6. `speedtolead` — the conversion mechanic
