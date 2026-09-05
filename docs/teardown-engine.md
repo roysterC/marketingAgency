@@ -1,7 +1,7 @@
 # Build spec — Research & Teardown Engine
 
-**Phase 1.** Status: in progress. Schema, taxonomy, resolve, `gbp` and `reviews` are built —
-see the build order in §9 for what remains.
+**Phase 1.** Status: in progress. Schema, taxonomy, resolve, `gbp`, `reviews` and `sitetech`
+are built — see the build order in §9 for what remains.
 
 ---
 
@@ -67,7 +67,8 @@ overlapping category SERP + shared ad-library keywords. Store *why* each competi
 Fan out: one job per `(collector × target)`.
 
 Rules:
-- Each collector owns exactly one data source
+- Each collector owns one data source. `sitetech` is the single exception, with two — and it
+  carries the failure handling that buys, see §3
 - Each returns raw structured JSON, persisted to `raw_captures`
 - Each declares `requires_auth` — cold mode runs the subset that doesn't
 - **Each fails independently.** A dead source degrades a report; it never kills a scan
@@ -173,6 +174,21 @@ unanswered one-star review is directly observed, so the count is verified even w
 a floor. The capture's `coverage` goes into the evidence so the benchmark pass can keep a floor
 out of the percentiles.
 
+### Two sources inside `sitetech`
+
+Every other collector owns one source. `sitetech` owns two — our own crawl, and PageSpeed
+Insights for field vitals — which is where "collectors fail independently" has to hold one level
+lower than the rule states it.
+
+Neither failure is exotic. PageSpeed is rate-limited and will refuse partway through a scan that
+fans out over six targets; a crawl times out on a slow host. So `crawl` and `vitals` are
+independently nullable on the capture, each half normalises on its own, and `source_errors`
+records what went missing and why — otherwise a half-collected site reads in the report as a
+healthy one.
+
+Nine of the thirteen codes come off the crawl, four off PageSpeed. Losing either half costs that
+section and nothing else.
+
 ---
 
 ## 4. The `speedtolead` collector — read before building
@@ -269,8 +285,12 @@ percentile.
 
 **The one real architectural constraint:** Playwright crawl and screenshot work does not fit
 Vercel functions. Either use a browser service (Browserless) or run a small always-on worker
-(Fly.io / Railway). Decide this before writing the `sitetech` collector, because it shapes how
-collectors are deployed.
+(Fly.io / Railway).
+
+Still open, and no longer blocking. `sitetech` is written against a `SiteCrawler` interface and
+both options return the same thing — rendered HTML, screenshots, timings — so the capture shape
+and every normalise rule hold either way. The decision moved to the adapter, where it has to be
+settled before the crawl first runs against a real site.
 
 ### Repo layout
 
@@ -333,8 +353,9 @@ PDF export, outbound automation, client-facing UI.
 1. ✅ Schema + taxonomy + finding types — everything else depends on these
 2. ✅ Resolve stage + competitor selection
 3. ✅ `gbp` and `reviews` (cheapest to verify, immediate signal)
-4. `sitetech` ← **next** — forces the Playwright deployment decision
-5. `localrank`
+4. ✅ `sitetech` — written behind a crawler interface; the Playwright deployment decision
+   moved to the adapter, see §7
+5. `localrank` ← **next**
 6. `speedtolead` — the conversion mechanic
 7. `aivis` — the differentiator
 8. Analyse + render

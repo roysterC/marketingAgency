@@ -85,6 +85,25 @@ export interface NormaliseContext {
   now: Date;
   role: TargetRole;
   peers?: PeerStats;
+  /**
+   * Which package this scan is for.
+   *
+   * Codes declare the segments they apply to, so a plumber is never told it is missing
+   * Product schema. Undefined runs every rule — acceptable in a focused unit test, wrong
+   * for a real scan.
+   */
+  segment?: Segment;
+}
+
+/**
+ * Whether a code is worth emitting for the scan's segment.
+ *
+ * The registry already knows — `segments` on each definition — so a collector asks rather
+ * than restating it. An undefined segment means the caller has not said, and every rule
+ * runs.
+ */
+export function appliesTo(code: FindingCode, segment?: Segment): boolean {
+  return segment === undefined || FINDINGS[code].segments.includes(segment);
 }
 
 export interface Collector<Raw> {

@@ -17,11 +17,16 @@ The registry carries three fields beyond the tables below, needed by the benchma
 |---|---|
 | `unit` | Unit of the measured value — `hours`, `per_month`, `position`, `none` for binary findings |
 | `polarity` | Which direction is good. Without it a percentile is meaningless: 0.4 reviews/month is bottom-quartile, 0.4 hours to reply is top-quartile |
-| `segments` | Which package the code applies to — drives which collectors a scan runs |
+| `segments` | Which package the code applies to — drives which collectors a scan runs, and which of their codes are emitted |
 | `benchmarkable` | Whether the value can feed `benchmarks`. Binary findings have nothing to take a percentile of |
 
 `segments` refines the spec's collector grouping: `gbp`, `localrank` and `citations` are
 SMB-only rather than shared, since a pure online brand has no local listing to audit.
+
+It also gates individual codes inside a shared collector. `sitetech` runs for both packages but
+emits `TECH_MISSING_LOCALBUSINESS_SCHEMA` only on an SMB scan and `TECH_MISSING_PRODUCT_SCHEMA`
+only on a DTC one — a plumber with no Product markup is correct, not broken. Collectors ask the
+registry via `appliesTo()` rather than restating the mapping.
 
 ## Rules
 
