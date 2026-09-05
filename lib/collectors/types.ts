@@ -19,7 +19,7 @@ import type {
 } from '../taxonomy/enums';
 import { FINDINGS, type FindingCode } from '../taxonomy/findings';
 import type { Evidence, FindingDraft, Place, Uuid } from './shared';
-import type { Priced } from '../resolve/providers';
+import { FREE, type Cost, type Priced } from '../resolve/providers';
 
 /**
  * What normalise emits.
@@ -115,6 +115,37 @@ export interface Collector<Raw> {
   readonly emits: readonly FindingCode[];
   collect(target: CollectTarget, ctx: CollectContext): Promise<Priced<Raw | null>>;
   normalise(raw: Raw | null, ctx: NormaliseContext): FindingSeed[];
+}
+
+/** The outcome of one fallible piece of collection. */
+export interface Attempt<T> {
+  value: T | null;
+  cost: Cost;
+  error: string | null;
+}
+
+/**
+ * Run one fallible piece of collection, surviving its failure.
+ *
+ * Rule 5 says a dead source degrades a report rather than killing a scan, and that has to
+ * hold inside a collector as well as between them — `sitetech` owns two sources, and
+ * `localrank` buys one map pack per keyword. A thrown provider yields a null result and a
+ * recorded reason rather than an exception that takes the run down.
+ *
+ * Cost is zero on failure: a request that errored is not a request we were billed for, and
+ * `scans.cost_pence` has to reflect what actually happened.
+ */
+export async function attempt<T>(run: () => Promise<Priced<T>>): Promise<Attempt<T>> {
+  try {
+    const { value, cost } = await run();
+    return { value, cost, error: null };
+  } catch (cause) {
+    return {
+      value: null,
+      cost: FREE,
+      error: cause instanceof Error ? cause.message : String(cause),
+    };
+  }
 }
 
 /** Median of a numeric sample. Null for an empty sample rather than NaN. */

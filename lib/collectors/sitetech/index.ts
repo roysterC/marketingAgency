@@ -12,13 +12,14 @@
  * the capture shape and every rule below are the same either way.
  */
 
-import { FREE, type Cost, type Priced } from '../../resolve/providers';
-import type {
-  CollectContext,
-  CollectTarget,
-  Collector,
-  FindingSeed,
-  NormaliseContext,
+import { FREE, type Priced } from '../../resolve/providers';
+import {
+  attempt,
+  type CollectContext,
+  type CollectTarget,
+  type Collector,
+  type FindingSeed,
+  type NormaliseContext,
 } from '../types';
 import { normaliseSiteTech } from './normalise';
 import type {
@@ -70,32 +71,6 @@ export const FROM_VITALS = [
  * Desktop is available but is not what a plumber's customers are holding.
  */
 const DEFAULT_STRATEGY: VitalsStrategy = 'mobile';
-
-interface Attempt<T> {
-  value: T | null;
-  cost: Cost;
-  error: string | null;
-}
-
-/**
- * Run one source, surviving its failure.
- *
- * A thrown provider yields a null half and a recorded reason rather than an exception
- * that takes the whole scan down. Cost is zero on failure: a request that errored was not
- * a request we were billed for, and `scans.cost_pence` has to reflect reality.
- */
-async function attempt<T>(run: () => Promise<Priced<T>>): Promise<Attempt<T>> {
-  try {
-    const { value, cost } = await run();
-    return { value, cost, error: null };
-  } catch (cause) {
-    return {
-      value: null,
-      cost: FREE,
-      error: cause instanceof Error ? cause.message : String(cause),
-    };
-  }
-}
 
 export function createSiteTechCollector(
   providers: SiteTechProviders,

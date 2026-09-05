@@ -1,7 +1,7 @@
 # Build spec — Research & Teardown Engine
 
-**Phase 1.** Status: in progress. Schema, taxonomy, resolve, `gbp`, `reviews` and `sitetech`
-are built — see the build order in §9 for what remains.
+**Phase 1.** Status: in progress. Schema, taxonomy, resolve and the `gbp`, `reviews`,
+`sitetech` and `localrank` collectors are built — see the build order in §9 for what remains.
 
 ---
 
@@ -189,6 +189,25 @@ healthy one.
 Nine of the thirteen codes come off the crawl, four off PageSpeed. Losing either half costs that
 section and nothing else.
 
+### One purchase per keyword in `localrank`
+
+Every other collector buys per business. `localrank` does not: one map pack query returns the
+subject *and* every competitor in a single response, so the purchase is scan-level even though
+the capture is per-target.
+
+Left alone, the fan-out in §2.2 would buy the same ten queries once per target — £0.30 becoming
+£1.80 against a £5 ceiling for the whole scan, for data already in hand. So the SERP provider is
+wrapped once per scan and shared: the first target pays, the rest read the same response for
+free, and `collector_runs.cost_pence` records what actually happened rather than a per-target
+estimate. Concurrent targets share the in-flight request; a failed query is evicted so a later
+target retries rather than inheriting the error.
+
+The other rule worth knowing here: **position is measured over money keywords only.** A business
+can rank second for a how-to article it wrote years ago while being invisible for every job in
+the area, and letting that into the median turns a position of 5 into 3.5 — flattering the
+number the whole section rests on. Directories are excluded from "outranked by a competitor" for
+the same reason: a plumber does not lose work to Checkatrade.
+
 ---
 
 ## 4. The `speedtolead` collector — read before building
@@ -317,7 +336,7 @@ Cold SMB scan, 1 subject + 5 competitors:
 |---|---|
 | Places API | ~£0.15 |
 | Review history | ~£0.10 |
-| SERP API (10 keywords) | ~£0.30 |
+| SERP API (10 keywords) | ~£0.30 — per scan, not per target |
 | PageSpeed Insights | free |
 | Own crawl | negligible |
 | AI visibility (8 prompts × 3 models) | ~£0.30 |
@@ -355,8 +374,8 @@ PDF export, outbound automation, client-facing UI.
 3. ✅ `gbp` and `reviews` (cheapest to verify, immediate signal)
 4. ✅ `sitetech` — written behind a crawler interface; the Playwright deployment decision
    moved to the adapter, see §7
-5. `localrank` ← **next**
-6. `speedtolead` — the conversion mechanic
+5. ✅ `localrank`
+6. `speedtolead` ← **next** — the conversion mechanic
 7. `aivis` — the differentiator
 8. Analyse + render
 9. Run on 10 real businesses; iterate on report quality, not on code

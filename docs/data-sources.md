@@ -16,7 +16,7 @@ This is a settled decision. See `../CLAUDE.md`.
 |---|---|---|---|
 | Business listings | Google Places API | ~£0.15/scan | Clean, official |
 | Review history | DataForSEO / equivalent | ~£0.10/scan | Clean. Places alone is not enough — see below |
-| SERP + map pack position | DataForSEO / Serper / SerpAPI | ~£0.30/scan | Clean, pick one |
+| SERP + map pack position | DataForSEO / Serper / SerpAPI | ~£0.30/scan | Clean, pick one. Bought once per scan, not once per target |
 | Core Web Vitals | PageSpeed Insights API | Free | Clean, rate-limited |
 | Site crawl | Own Playwright worker | Infra only | Respect `robots.txt` |
 | Tech stack detection | Own — inspect page | Free | Clean |
