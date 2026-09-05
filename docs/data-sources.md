@@ -14,7 +14,8 @@ This is a settled decision. See `../CLAUDE.md`.
 
 | Source | Provider | Cost | Status |
 |---|---|---|---|
-| Business listings, reviews | Google Places API | ~£0.15/scan | Clean, official |
+| Business listings | Google Places API | ~£0.15/scan | Clean, official |
+| Review history | DataForSEO / equivalent | ~£0.10/scan | Clean. Places alone is not enough — see below |
 | SERP + map pack position | DataForSEO / Serper / SerpAPI | ~£0.30/scan | Clean, pick one |
 | Core Web Vitals | PageSpeed Insights API | Free | Clean, rate-limited |
 | Site crawl | Own Playwright worker | Infra only | Respect `robots.txt` |
@@ -24,9 +25,25 @@ This is a settled decision. See `../CLAUDE.md`.
 | Ad library (DTC) | Reseller | ~£1/scan | ⚠️ See below |
 | Directory citations | Mixed | ~£0.10/scan | Check per-directory terms |
 
+## Why reviews need their own source
+
+The Places API returns the aggregate rating and count alongside **at most five reviews**, and it
+does not expose owner replies at all. That covers two of the six `reviews` findings — volume and
+rating, both aggregates the API states outright — and no more.
+
+Velocity, recency and reply rate are read off the review *list*. A five-review sample cannot
+establish that the newest review is eight months old, only that the newest one it happened to
+return is; and a reply rate over five of two hundred reviews is not a rate. All six codes are
+`verified` in the taxonomy, so those rules skip rather than estimate — the capture carries a
+`coverage` field and normalise gates on it.
+
+A reviews API returns the full history with replies, still as bought public data rather than
+scraping. It costs roughly ten pence a scan and it is what makes `REVIEW_VELOCITY_LOW` — the
+strongest local finding the engine produces — reachable in cold mode. Not a close call.
+
 ## Cost per cold SMB scan
 
-1 subject + 5 competitors: **~£1.35 – 2.50**. DTC adds ~£1. Budget **£2–5**.
+1 subject + 5 competitors: **~£1.45 – 2.60**. DTC adds ~£1. Budget **£2–5**.
 
 Track actuals in `collector_runs.cost_pence` from day one — the cold-outbound economics depend
 on this number staying low, and it will drift as collectors get added.

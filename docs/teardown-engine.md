@@ -1,7 +1,7 @@
 # Build spec — Research & Teardown Engine
 
-**Phase 1.** Status: in progress. Schema, taxonomy, resolve and `gbp` are built — see the
-build order in §9 for what remains.
+**Phase 1.** Status: in progress. Schema, taxonomy, resolve, `gbp` and `reviews` are built —
+see the build order in §9 for what remains.
 
 ---
 
@@ -111,7 +111,7 @@ LLM writes the narrative over the structured findings.
 |---|---|---|
 | `gbp` | Google Places API (cold) / Business Profile API (warm) | Listing completeness, categories, hours, photos, attributes — plus claim status, services, posts and Q&A in warm mode only |
 | `localrank` | SERP API | Map pack + organic position across a keyword set |
-| `reviews` | Places API + platform | Volume, velocity, rating, response rate, unanswered negatives |
+| `reviews` | Reviews API — Places alone covers 2 of 6, see below | Volume, velocity, rating, recency, response rate, unanswered negatives |
 | `sitetech` | Own crawl + PageSpeed Insights | CWV, mobile, indexation, schema, titles, broken links |
 | `citations` | Directory lookups | NAP consistency across directories |
 | `speedtolead` | Live test — see §4 | Measured response time, form health |
@@ -147,6 +147,31 @@ would be a false finding in a paid report.
 Commercially this is useful rather than limiting — it gives the free cold teardown a concrete
 reason to convert. "Four more checks run once you grant access" is a better upsell than a
 vaguer promise, and it's honest about why.
+
+### What `reviews` needs from its source
+
+A different split, and this one is about which provider you buy rather than warm access.
+
+Places returns the aggregate rating and count plus **at most five reviews**, with no owner
+replies. Volume and rating survive that, because they are aggregates the API states outright.
+Velocity, recency and reply rate do not, because they are read off the review list — a
+five-review sample cannot establish that the newest review is eight months old, only that the
+newest one it returned is.
+
+So the capture carries a `coverage` field (`complete` or `sample`) and the list-derived rules
+skip when it is a sample, exactly as the warm-only `gbp` fields skip when undefined. Every
+`reviews` code is `verified` in the taxonomy; a rate over five of two hundred reviews would be
+an estimate wearing a verified label, which is the one thing rule 4 forbids.
+
+The consequence is a purchasing decision, settled: **buy the full review history.** It runs
+about ten pence a scan and it is what makes `REVIEW_VELOCITY_LOW` reachable cold — the strongest
+finding in the local report, and the one a prospect cannot argue with. See
+[`data-sources.md`](data-sources.md).
+
+The one exception is `REVIEW_RESPONSE_ABSENT_NEGATIVE`, which runs on a sample too: each
+unanswered one-star review is directly observed, so the count is verified even where it is only
+a floor. The capture's `coverage` goes into the evidence so the benchmark pass can keep a floor
+out of the percentiles.
 
 ---
 
@@ -271,12 +296,13 @@ Cold SMB scan, 1 subject + 5 competitors:
 | Item | Est. |
 |---|---|
 | Places API | ~£0.15 |
+| Review history | ~£0.10 |
 | SERP API (10 keywords) | ~£0.30 |
 | PageSpeed Insights | free |
 | Own crawl | negligible |
 | AI visibility (8 prompts × 3 models) | ~£0.30 |
 | LLM analysis (~150k in / 15k out) | ~£0.60 |
-| **Total** | **~£1.35 – 2.50** |
+| **Total** | **~£1.45 – 2.60** |
 
 DTC adds ad-library data (~£1). Budget **£2–5 per scan**. Against a £500–1,500 product that is
 noise, and it's still viable at cold-outbound volume.
@@ -306,8 +332,8 @@ PDF export, outbound automation, client-facing UI.
 
 1. ✅ Schema + taxonomy + finding types — everything else depends on these
 2. ✅ Resolve stage + competitor selection
-3. ✅ `gbp`, then `reviews` ← **next** (cheapest to verify, immediate signal)
-4. `sitetech` — forces the Playwright deployment decision
+3. ✅ `gbp` and `reviews` (cheapest to verify, immediate signal)
+4. `sitetech` ← **next** — forces the Playwright deployment decision
 5. `localrank`
 6. `speedtolead` — the conversion mechanic
 7. `aivis` — the differentiator
