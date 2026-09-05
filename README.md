@@ -6,8 +6,9 @@ The build for an AI-first marketing agency run by a solo technical founder. Sell
 not hours.
 
 **Current phase: A1 — the Research & Teardown Engine.** The pipeline is built end to end —
-resolve, six collectors, analyse and render — with real adapters for every source but one: the
-speed-to-lead probe, which should not exist before the monitored inbox does. Nothing has run
+resolve, six collectors, analyse and render — with real adapters for every source but one.
+Sending speed-to-lead enquiries is deliberately deferred on social grounds
+([spec §4](docs/teardown-engine.md)); the collector itself is built and tested. Nothing has run
 against a real business yet.
 
 The roadmap runs two tracks: **A (Product)** is sequential and self-paced; **B (Delivery)** is
@@ -42,11 +43,15 @@ resolve  →  collect  →  normalise  →  analyse  →  render
 ## Next step
 
 Phase 1 MVP, in order — schema + taxonomy ✅ → resolve ✅ → `gbp` ✅ → `reviews` ✅ →
-`sitetech` ✅ → `localrank` ✅ → `speedtolead` ✅ → `aivis` ✅ → analyse + render ✅ →
+`sitetech` ✅ → `localrank` ✅ → `speedtolead` ⏸ → `aivis` ✅ → analyse + render ✅ →
 **run on 10 real businesses ←**.
 
-That last step needs the speed-to-lead probe and keys in `.env` (see
-[`.env.example`](.env.example)). Every stage still runs on fixtures with no keys and no spend,
-which is how the whole test suite works.
+That last step needs keys in `.env` (see [`.env.example`](.env.example)). Every stage still
+runs on fixtures with no keys and no spend, which is how the whole test suite works.
+
+`speedtolead` will produce nothing until its sender is built, which is a deliberate deferral
+rather than an omission. Collectors fail independently, so a scan runs without it — but it does
+cost the report its sharpest finding, and [spec §1](docs/teardown-engine.md) records what
+carries the conversion mechanic instead.
 
 Ship criteria and the full cut are in the [spec](docs/teardown-engine.md#9-phase-1-mvp).

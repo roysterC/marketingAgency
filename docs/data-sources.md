@@ -18,7 +18,7 @@ This is a settled decision. See `../CLAUDE.md`.
 | Review history | DataForSEO | ~£0.10/scan | Clean. Places alone is not enough — see below |
 | SERP + map pack position | DataForSEO | ~£0.30/scan | Clean. Bought once per scan, not once per target |
 | Core Web Vitals | PageSpeed Insights API | Free | Clean, rate-limited |
-| Site crawl | Own Playwright worker | Infra only | Respect `robots.txt` |
+| Site crawl | Own fetch crawler | Infra only | Respect `robots.txt`. A browser is only needed for screenshots and client-rendered sites |
 | Tech stack detection | Own — inspect page | Free | Clean |
 | AI visibility | Anthropic / OpenAI / Perplexity APIs | ~£0.30/scan | Clean |
 | LLM analysis | Anthropic API | ~£0.60/scan | — |
@@ -87,6 +87,9 @@ them. A site that shuts us out is still reported as blocked; we simply do not cr
 This collector contacts real businesses. Ethics rules are in the spec (§4) and are not optional:
 genuine, identified enquiries only — a mystery shop, never a fabricated job.
 
+**Sending is deferred as of 2026-09-06** on social grounds rather than technical ones. Nothing
+is being contacted until that is revisited. See the adapter note below.
+
 ## Keys and secrets
 
 All provider keys in environment variables, never committed.
@@ -116,8 +119,21 @@ a network call or a key.
 
 ### The one that is deliberately not built
 
-**`SpeedToLeadProbe`** is not blocked on a technical decision. It is the adapter that sends
-the enquiry, and it should not exist before the monitored inbox and phone number in
-`.env.example` do — the ethics guard checks that an identity was configured, not that anyone
-is reading the inbox. Building the sender first would make it possible to contact two hundred
-businesses from an address nobody answers, which is the failure the rule exists to prevent.
+**`SpeedToLeadProbe`** — deferred 2026-09-06, and not for a technical reason.
+
+It is the adapter that puts an enquiry in a real business's inbox. The decision to hold off is
+about the social implications of doing that at outbound volume to people who never asked to be
+part of this. It is a judgement call, it is revisitable, and nothing has been deleted to make
+it: the collector, the seven taxonomy codes, the 48-hour window handling and `ethics.ts` are
+all built and tested against fixtures. Only the sender is absent.
+
+Two smaller points worth carrying forward when it is picked up again:
+
+- It should not exist before the monitored inbox and phone number in `.env.example` do. The
+  ethics guard checks that an identity was *configured*, not that anyone is *reading* it —
+  so the sender alone would make it possible to contact two hundred businesses from an address
+  nobody answers.
+- **Two of the seven codes need no contact at all.** `STL_NO_FORM_ON_SITE` and
+  `STL_NO_PHONE_VISIBLE_MOBILE` come from looking at the site, which the crawler already does.
+  A read-only probe implementing `inspect()` and leaving `submit()` unimplemented would produce
+  those two with none of the social exposure. That option is unaffected by this decision.

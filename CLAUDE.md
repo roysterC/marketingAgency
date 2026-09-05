@@ -83,6 +83,14 @@ enquiry that is anonymous, unattributable, or booking work that does not exist, 
 only path to a submission. It has to be code because a fake lead and a mystery shop produce
 identical timestamps: nothing downstream could ever tell them apart.
 
+**Sending is deferred as of 2026-09-06.** A decision about the social implications of contacting
+real businesses at outbound volume, not a technical one — revisit rather than treat as settled.
+The collector and the guard stay built and tested; the `SpeedToLeadProbe` adapter that would
+actually send is simply not written. It is not a blocker: collectors fail independently, so a
+scan runs without it. It does cost the report its sharpest finding, and
+[`docs/teardown-engine.md`](docs/teardown-engine.md) §1 and §4 record the consequence and what
+carries the conversion mechanic instead.
+
 ## Stack
 
 - **Next.js (App Router)** — dashboard, API, report rendering

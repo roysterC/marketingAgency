@@ -1,8 +1,9 @@
 # Build spec — Research & Teardown Engine
 
 **Phase 1.** Status: in progress. The pipeline is built end to end, with real adapters for
-every source but one — see [`data-sources.md`](data-sources.md#adapters). What remains is the
-speed-to-lead probe (needs a monitored inbox), keys, and the run on 10 real businesses. See §9.
+every source but one — see [`data-sources.md`](data-sources.md#adapters). Sending speed-to-lead
+enquiries is **deferred**, deliberately and not for technical reasons (§4). What remains is keys
+and the run on 10 real businesses. See §9.
 
 ---
 
@@ -37,6 +38,21 @@ previously unknown.** Impressive-but-abstract does not sell. This does:
 Undeniable, it stings, and it sells edge service #2 in one line. Design backwards from this —
 the `speedtolead` collector is the highest-value part of the system even though it is not the
 most technically interesting.
+
+**Deferred as of 2026-09-06.** The enquiry-sending half of `speedtolead` is not being built for
+now — a decision about the social implications of contacting real businesses, not a technical
+one. See §4. The collector, its rules and its ethics guard all exist and are tested; what is
+absent is the adapter that would actually send anything.
+
+That makes the line above unavailable, so **`aivis` carries the conversion mechanic instead.**
+`AIVIS_OUTDATED_FACT` — a model handing customers the wrong phone number — is the taxonomy's
+own candidate for the most attention-getting finding in the report, and it meets the same three
+tests: embarrassing, checkable in ten seconds, and almost never already known. Behind it,
+`AIVIS_COMPETITOR_CITED`, `REVIEW_RESPONSE_ABSENT_NEGATIVE` and `LOCALRANK_LOST_TO_COMPETITOR`
+are the other findings that sting.
+
+This is the one part of the MVP where the deferral has a commercial cost rather than just a
+smaller feature set. It is worth re-reading the ship criteria in §9 with that in mind.
 
 ---
 
@@ -126,7 +142,7 @@ render step calls it rather than trusting a caller to have done so.
 | `reviews` | Reviews API — Places alone covers 2 of 6, see below | Volume, velocity, rating, recency, response rate, unanswered negatives |
 | `sitetech` | Own crawl + PageSpeed Insights | CWV, mobile, indexation, schema, titles, broken links |
 | `citations` | Directory lookups | NAP consistency across directories |
-| `speedtolead` | Live test — see §4 | Measured response time, form health |
+| `speedtolead` | Live test — **sending deferred, see §4** | Measured response time, form health |
 | `aivis` | LLM APIs — the model is the subject, see below | Citation share, competitor citations, incorrect claims, entity presence |
 
 ### DTC-only
@@ -245,6 +261,19 @@ one's answer.
 ---
 
 ## 4. The `speedtolead` collector — read before changing
+
+> **Status: sending is deferred, 2026-09-06.** The decision is about the social implications of
+> contacting real businesses that never asked to be part of this, not about whether the code
+> works. Everything in this section stands and nothing has been deleted — the collector, the
+> closed taxonomy codes, the 48-hour window handling and `ethics.ts` are all built and tested
+> against fixtures. The missing piece is `SpeedToLeadProbe`, the adapter that would put an
+> enquiry in someone's inbox.
+>
+> Two of the seven codes need no contact at all and could be produced by a read-only probe that
+> only looks at the site: `STL_NO_FORM_ON_SITE` and `STL_NO_PHONE_VISIBLE_MOBILE`. That option
+> is open and is not affected by this decision.
+>
+> Revisit when there is a monitored inbox and a settled view on the mystery-shop question.
 
 This collector contacts real businesses. That makes it the highest-value module and the one
 with a real ethical line running through it.
@@ -428,12 +457,13 @@ noise, and it's still viable at cold-outbound volume.
 Cut hard. Ship this, then extend.
 
 - **One vertical** (trades or clinics), UK, cold mode only
-- **Six collectors:** `gbp`, `localrank`, `reviews`, `sitetech`, `speedtolead`, `aivis`
+- **Five collectors running:** `gbp`, `localrank`, `reviews`, `sitetech`, `aivis`.
+  `speedtolead` is built but not wired to a sender — see §4
 - LLM narrative + HTML report
 - Manual scan trigger from a simple internal dashboard — no self-serve, no auth, no billing
 
 Explicitly **not** in MVP: DTC collectors, warm mode, benchmarks (schema only, no claims yet),
-PDF export, outbound automation, client-facing UI.
+PDF export, outbound automation, client-facing UI, and **sending speed-to-lead enquiries**.
 
 ### Ship criteria
 
@@ -450,7 +480,7 @@ PDF export, outbound automation, client-facing UI.
 4. ✅ `sitetech` — written behind a crawler interface; the Playwright deployment decision
    moved to the adapter, see §7
 5. ✅ `localrank`
-6. ✅ `speedtolead` — the conversion mechanic. Ethics enforced in code, see §4
+6. ✅ `speedtolead` — collector and ethics guard built; sending deferred, see §4
 7. ✅ `aivis` — the differentiator. See the rule-2 note in §3
 8. ✅ Analyse + render — the pre-render gate is in `lib/analyse/validate.ts`, see
    [`schema.md`](schema.md#validation-before-render)
