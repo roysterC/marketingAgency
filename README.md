@@ -45,6 +45,7 @@ npm run scan -- --name "Riverside Plumbing" --postcode "SW18 4AB" --fixtures
 | Real provider adapters | ✅ Places, DataForSEO, PageSpeed, three LLMs, site crawler |
 | Persistence + scan runner + CLI | ✅ |
 | Benchmark aggregation (A2's engine) | ✅ produces nothing until ~20 businesses, by design |
+| A3 — AI visibility tracking, movement, alerts | ✅ needs 30 days of runs to prove |
 | **Run on 10 real businesses** | ← next, needs keys |
 
 **~11,500 lines of source, ~6,500 of tests, 539 tests passing.** `npm run check` runs typecheck,
@@ -137,6 +138,9 @@ npm run scan -- --name "Riverside Plumbing" --postcode "SW18 4AB" --fixtures
 npm run scan -- --list
 npm run benchmarks          # recompute percentiles across every scan so far
 npm run check:keys -- --live
+
+npm run visibility -- --track  --set trades.plumbing --note "what you changed"
+npm run visibility -- --report --set trades.plumbing
 ```
 
 Scans write to `.scans/` — the store, and a rendered report per scan. That directory is

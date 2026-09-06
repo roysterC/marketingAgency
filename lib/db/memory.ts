@@ -26,6 +26,7 @@ import type {
   Uuid,
 } from '../types/index';
 import { FINDINGS } from '../taxonomy/findings';
+import type { VisibilitySnapshot } from '../visibility/types';
 import type {
   BenchmarkRow,
   NewBusiness,
@@ -48,6 +49,7 @@ export interface StoreState {
   findings: Finding[];
   reports: Report[];
   benchmarks: Benchmark[];
+  snapshots: VisibilitySnapshot[];
 }
 
 export const emptyState = (): StoreState => ({
@@ -59,6 +61,7 @@ export const emptyState = (): StoreState => ({
   findings: [],
   reports: [],
   benchmarks: [],
+  snapshots: [],
 });
 
 export interface MemoryStoreOptions {
@@ -266,6 +269,24 @@ export class MemoryScanStore implements ScanStore {
   async replaceBenchmarks(rows: Benchmark[]): Promise<void> {
     this.state.benchmarks = rows;
     await this.#changed();
+  }
+
+  async saveSnapshot(snapshot: VisibilitySnapshot): Promise<VisibilitySnapshot> {
+    // Append-only. A snapshot records what the models said at a moment; replacing one would
+    // rewrite the history the whole product is built on.
+    this.state.snapshots.push(snapshot);
+    await this.#changed();
+    return snapshot;
+  }
+
+  async snapshots(promptSet: string): Promise<VisibilitySnapshot[]> {
+    return this.state.snapshots
+      .filter((s) => s.prompt_set === promptSet)
+      .sort((a, b) => a.run_at.localeCompare(b.run_at));
+  }
+
+  async promptSets(): Promise<string[]> {
+    return [...new Set(this.state.snapshots.map((s) => s.prompt_set))].sort();
   }
 
   async listScans(limit = 50): Promise<Scan[]> {

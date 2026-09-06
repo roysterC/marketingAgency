@@ -31,6 +31,7 @@ import type {
   Uuid,
 } from '../types/index';
 import type { ScanStatus } from '../taxonomy/enums';
+import type { VisibilitySnapshot } from '../visibility/types';
 import type { FindingCode } from '../taxonomy/findings';
 
 /** One business's measurement of one code, ready to be aggregated. */
@@ -119,4 +120,18 @@ export interface ScanStore {
 
   /** Every scan, newest first. What the CLI lists and the aggregation job walks. */
   listScans(limit?: number): Promise<Scan[]>;
+
+  /**
+   * Append a visibility snapshot.
+   *
+   * Append-only, unlike findings. A scan's findings are replaced when rules improve; a
+   * snapshot is a measurement taken at a moment and rewriting it would rewrite history.
+   */
+  saveSnapshot(snapshot: VisibilitySnapshot): Promise<VisibilitySnapshot>;
+
+  /** Snapshots for one series, oldest first. */
+  snapshots(promptSet: string): Promise<VisibilitySnapshot[]>;
+
+  /** Which series have been tracked at all. */
+  promptSets(): Promise<string[]>;
 }

@@ -68,17 +68,35 @@ Turn accumulated scans into the thing nobody else has.
 
 ---
 
-## A3 — AI Visibility Tracker (edge service #1)
+## A3 — AI Visibility Tracker (edge service #1) ← built, not yet proven
 
 Promote the `aivis` collector into a standalone monitored product.
 
-- Prompt sets per vertical, tracked on a schedule rather than one-shot
-- Citation share-of-voice over time, competitor citation tracking
-- Alerting on visibility loss
-- Sold as its own retainer
+- Prompt sets per vertical, tracked on a schedule rather than one-shot ✅
+- Citation share-of-voice over time, competitor citation tracking ✅
+- Alerting on visibility loss ✅
+- Sold as its own retainer — not yet
 
 **Ship criteria:** tracking your own agency's prompts for 30 days, with a movement you can
 attribute to something you changed.
+
+The code is in [`lib/visibility/`](../lib/visibility/), run with `npm run visibility`. What
+remains is **elapsed time**, which is the one thing that cannot be built: the criterion needs
+thirty days of runs. Start the clock early — it is the only phase gated on the calendar rather
+than on work.
+
+Two things the implementation had to get right, both recorded in
+[`movement.ts`](../lib/visibility/movement.ts):
+
+- **Models are not deterministic.** Share moves a few points run to run with nothing having
+  changed, so the baseline is the median of a window of earlier runs rather than the previous
+  run. A tracker that alerts on noise gets switched off in a fortnight.
+- **A changed prompt set is not a movement.** Edit the questions and every share shifts because
+  you asked something different. Runs that are not comparable are excluded from the baseline
+  rather than charted as change.
+
+Scheduling itself is deliberately not built. `--track` is idempotent and cheap, so a cron entry
+is the whole of it, and a scheduler before a second caller would be tooling ahead of the offer.
 
 ---
 

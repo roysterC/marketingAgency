@@ -134,6 +134,25 @@ create table prompt_sets (
   updated_at timestamptz default now()
 );
 
+-- AI visibility tracking (A3). Separate from `findings` on purpose: findings are
+-- exception-based — AIVIS_NOT_CITED only exists below 20% share — and a tracker needs the
+-- measurement every run, including the good ones. A series of "nothing to report" is what
+-- makes the first drop visible.
+create table visibility_snapshots (
+  id          uuid primary key default gen_random_uuid(),
+  prompt_set  text not null,               -- names the series
+  run_at      timestamptz not null default now(),
+  -- Stored per snapshot, not looked up. The set on disk changes, and comparing two runs
+  -- that asked different questions reports an artefact as a result.
+  prompts     jsonb not null,
+  models      jsonb not null,
+  answers     integer not null default 0,  -- fewer than prompts x models when one refused
+  entries     jsonb not null default '[]'::jsonb,
+  note        text,                        -- what you changed. Attribution, written at the time
+  cost_pence  integer not null default 0
+);
+create index on visibility_snapshots (prompt_set, run_at desc);
+
 -- Rendered reports, versioned so a re-render doesn't destroy what a client was sent.
 create table reports (
   id           uuid primary key default gen_random_uuid(),
