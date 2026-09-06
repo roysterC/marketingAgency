@@ -652,3 +652,160 @@ describe('fetching a homepage for platform detection', () => {
     assert.equal(value, null);
   });
 });
+
+// ------------------------------------------- what the first live crawl got wrong
+
+/**
+ * Every case below was found by pointing the crawler at a real Birmingham roofer and
+ * auditing the report against the site. Each produced a confident, false finding, and none
+ * could have been caught by a fixture: they are all shapes the real web has and a
+ * hand-written fixture does not.
+ */
+describe('things a real site does that a fixture does not', () => {
+  interface Entry {
+    status: number;
+    body: string;
+    headers?: Record<string, string>;
+    /** Where the request landed, when it is not where it was sent. */
+    finalUrl?: string;
+  }
+
+  async function crawlSite(site: Record<string, Entry>, overrides = {}) {
+    const asked: string[] = [];
+    const impl = (async (url: string) => {
+      const key = url.replace(/\/$/, '') === HOST ? `${HOST}/` : url;
+      asked.push(key);
+      const entry = site[key] ?? { status: 404, body: 'Not found' };
+      return {
+        ok: entry.status < 400,
+        status: entry.status,
+        url: entry.finalUrl ?? key,
+        headers: { get: (h: string) => entry.headers?.[h.toLowerCase()] ?? null },
+        text: async () => entry.body,
+      } as unknown as Response;
+    }) as unknown as typeof fetch;
+
+    const crawler = createSiteCrawler({
+      contactUrl: CONTACT,
+      fetchImpl: impl,
+      sleep: async () => {},
+      ...overrides,
+    });
+    const { value } = await crawler.crawl(HOST);
+    return { result: value, asked };
+  }
+
+  const ROBOTS = { status: 200, body: 'User-agent: *\nAllow: /\n' };
+
+  test('an image in an uploads folder is not a page with a missing title', async () => {
+    const { result, asked } = await crawlSite({
+      [`${HOST}/robots.txt`]: ROBOTS,
+      [`${HOST}/`]: {
+        status: 200,
+        body: page(
+          'Roofers in Birmingham',
+          `${FILLER}<a href="/wp-content/uploads/2022/11/WhatsApp-Image.jpeg">Photo</a>`,
+        ),
+      },
+      [`${HOST}/wp-content/uploads/2022/11/WhatsApp-Image.jpeg`]: {
+        status: 200,
+        body: '\xff\xd8\xff\xe0JFIF binary',
+        headers: { 'content-type': 'image/jpeg' },
+      },
+    });
+
+    // The live report said "2 of 25 pages have no title tag at all". Both were photographs.
+    assert.deepEqual(
+      result.pages.filter((p) => p.title === null),
+      [],
+    );
+    assert.equal(result.pages.length, 1);
+    assert.ok(!result.pages.some((p) => p.url.endsWith('.jpeg')));
+    // It is still link-checked — a 404 image is a real problem — so the request is made.
+    // What changed is that a 200 image is no longer a titleless page.
+    assert.ok(asked.some((u) => u.endsWith('.jpeg')));
+    assert.deepEqual(result.broken_links, []);
+  });
+
+  test('a non-HTML response is not read as a page even without a telltale extension', async () => {
+    const { result } = await crawlSite({
+      [`${HOST}/robots.txt`]: ROBOTS,
+      [`${HOST}/`]: {
+        status: 200,
+        body: page('Roofers in Birmingham', `${FILLER}<a href="/brochure">Brochure</a>`),
+      },
+      [`${HOST}/brochure`]: {
+        status: 200,
+        body: '%PDF-1.4 binary',
+        headers: { 'content-type': 'application/pdf' },
+      },
+    });
+
+    assert.deepEqual(result.pages.map((p) => p.url), [`${HOST}/`]);
+    // A 200 PDF is a working link. It is only not a page.
+    assert.deepEqual(result.broken_links, []);
+  });
+
+  test('two URLs that redirect to one page are one page, not a duplicate title', async () => {
+    const { result } = await crawlSite({
+      [`${HOST}/robots.txt`]: ROBOTS,
+      [`${HOST}/`]: {
+        status: 200,
+        body: page(
+          'Roofers in Birmingham',
+          `${FILLER}<a href="/about-us">About</a><a href="/about-us/">About again</a>`,
+        ),
+      },
+      [`${HOST}/about-us`]: {
+        status: 200,
+        body: page('About Windsor Roofing', FILLER),
+        finalUrl: `${HOST}/about-us/`,
+      },
+      [`${HOST}/about-us/`]: { status: 200, body: page('About Windsor Roofing', FILLER) },
+    });
+
+    // The live crawl fetched four URLs twice and then reported each title as duplicating
+    // itself. `seen` tracked what was requested; pages recorded where it landed.
+    const abouts = result.pages.filter((p) => p.url === `${HOST}/about-us/`);
+    assert.equal(abouts.length, 1);
+    assert.equal(result.pages.length, 2);
+  });
+
+  test('one dead URL linked from every page is one broken link, not one per page', async () => {
+    const dead = `${HOST}/quote-form`;
+    const linkTo = `${FILLER}<a href="/quote-form">Get a quote</a>`;
+    const { result } = await crawlSite({
+      [`${HOST}/robots.txt`]: ROBOTS,
+      [`${HOST}/`]: {
+        status: 200,
+        body: page('Home', `${linkTo}<a href="/services">Services</a><a href="/contact">Contact</a>`),
+      },
+      [`${HOST}/services`]: { status: 200, body: page('Services', linkTo) },
+      [`${HOST}/contact`]: { status: 200, body: page('Contact', linkTo) },
+      [dead]: { status: 404, body: 'Not found' },
+    });
+
+    assert.equal(result.broken_links.length, 1);
+    assert.equal(result.broken_links[0]!.to, dead);
+    // The information is kept rather than dropped: one dead link, on three pages.
+    assert.equal(result.broken_links[0]!.occurrences, 3);
+  });
+
+  test("Cloudflare's email obfuscation is never checked and never reported", async () => {
+    const { result, asked } = await crawlSite({
+      [`${HOST}/robots.txt`]: ROBOTS,
+      [`${HOST}/`]: {
+        status: 200,
+        body: page(
+          'Roofers in Birmingham',
+          `${FILLER}<a href="/cdn-cgi/l/email-protection#abc">Email us</a>`,
+        ),
+      },
+    });
+
+    // It answers 404 to everything that is not a browser, where it decodes to a mailto.
+    // The live report called this sixteen broken links.
+    assert.deepEqual(result.broken_links, []);
+    assert.ok(!asked.some((u) => u.includes('cdn-cgi')));
+  });
+});

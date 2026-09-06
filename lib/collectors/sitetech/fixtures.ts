@@ -115,16 +115,19 @@ export const NEGLECTED_CRAWL: CrawlResult = {
       from: 'http://riversideplumbing.example/',
       to: 'http://riversideplumbing.example/boiler-servicing',
       status: 404,
+      occurrences: 3,
     },
     {
       from: 'http://riversideplumbing.example/services',
       to: 'http://checkatrade.example/riverside',
       status: 404,
+      occurrences: 1,
     },
     {
       from: 'http://riversideplumbing.example/contact',
       to: 'http://riversideplumbing.example/quote-form',
       status: 500,
+      occurrences: 1,
     },
   ],
   // A partial disallow is ordinary housekeeping, and must not read as "blocked from

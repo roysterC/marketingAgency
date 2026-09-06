@@ -83,6 +83,60 @@ const pathOf = (url: string): string => {
 };
 
 /**
+ * Extensions that are never a page.
+ *
+ * The first live crawl followed two `.jpeg` links out of a WordPress uploads folder,
+ * parsed the binary as markup, found no `<title>` in it, and reported "2 of 25 pages have
+ * no title tag at all" about two photographs. Content-type is the authority below, but
+ * checking the extension first means we never spend the request.
+ */
+export const ASSET_EXTENSIONS = new Set([
+  'jpg', 'jpeg', 'png', 'gif', 'webp', 'avif', 'svg', 'ico', 'bmp', 'tiff',
+  'pdf', 'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx', 'zip', 'gz', 'rar',
+  'mp3', 'mp4', 'wav', 'mov', 'avi', 'webm',
+  'css', 'js', 'mjs', 'json', 'xml', 'rss', 'txt',
+  'woff', 'woff2', 'ttf', 'otf', 'eot',
+]);
+
+/** Content types we will read as a page. Anything else is a file that happens to be linked. */
+const HTML_TYPES = /^(?:text\/html|application\/xhtml\+xml)/i;
+
+/**
+ * Paths that belong to infrastructure rather than the site.
+ *
+ * `/cdn-cgi/l/email-protection` is Cloudflare's email obfuscation target. It answers 404 to
+ * a bare fetch and resolves to a real mailto in a browser, so checking it produces a broken
+ * link that is not broken — sixteen of them on the first live crawl, one per page carrying
+ * an obfuscated address.
+ */
+const INFRASTRUCTURE_PATHS = [/^\/cdn-cgi\//i];
+
+export function looksLikeAsset(url: string): boolean {
+  try {
+    const { pathname } = new URL(url);
+    const last = pathname.split('/').pop() ?? '';
+    const dot = last.lastIndexOf('.');
+    return dot > 0 && ASSET_EXTENSIONS.has(last.slice(dot + 1).toLowerCase());
+  } catch {
+    return false;
+  }
+}
+
+export function isInfrastructure(url: string): boolean {
+  try {
+    return INFRASTRUCTURE_PATHS.some((p) => p.test(new URL(url).pathname));
+  } catch {
+    return false;
+  }
+}
+
+export function isHtml(contentType: string | null): boolean {
+  // No header at all is treated as HTML: plenty of small sites send none, and refusing to
+  // read them would lose real pages. A wrong type that says so is the case being caught.
+  return contentType === null || HTML_TYPES.test(contentType.trim());
+}
+
+/**
  * Whether a page looks like a JavaScript shell rather than a thin page.
  *
  * A near-empty body with scripts in it is a site this crawler cannot read; a near-empty
@@ -185,6 +239,10 @@ export function createSiteCrawler(config: CrawlerConfig): SiteCrawler {
       // --- walk the site ---------------------------------------------------
       const queue: string[] = [start];
       const seen = new Set<string>();
+      // Final URLs already recorded as pages. `seen` holds what we *asked* for, which is not
+      // the same thing: /about-us and /about-us/ are two requests that redirect to one page,
+      // and counting both crawled it twice and then reported its title as duplicating itself.
+      const crawled = new Set<string>();
       const pages: CrawledPage[] = [];
       const outbound: Array<{ from: string; to: string }> = [];
       const statuses = new Map<string, number>();
@@ -221,6 +279,15 @@ export function createSiteCrawler(config: CrawlerConfig): SiteCrawler {
 
         if (response.status >= 400) continue;
 
+        // A linked file is not a page. Its status is already recorded above, so a 200 PDF
+        // still counts as a working link — it just is not read for titles or content.
+        if (!isHtml(response.headers.get('content-type'))) continue;
+
+        // Redirects collapse: two requested URLs can land on one page.
+        if (crawled.has(response.finalUrl)) continue;
+        crawled.add(response.finalUrl);
+        seen.add(response.finalUrl);
+
         const facts = readPage(response.text, response.headers.get('x-robots-tag'));
 
         // Judged on the homepage only. One thin page deep in a site is a finding; a
@@ -241,13 +308,37 @@ export function createSiteCrawler(config: CrawlerConfig): SiteCrawler {
         for (const href of facts.links) {
           const resolved = resolveUrl(href, response.finalUrl);
           if (!resolved) continue;
+
+          // Never checked and never reported: it is not a link the site chose to publish,
+          // and it answers 404 to everything that is not a browser.
+          if (isInfrastructure(resolved)) continue;
+
+          // Still link-checked — a 404 stylesheet is a real problem — but never queued as
+          // a page to read.
           outbound.push({ from: response.finalUrl, to: resolved });
+          if (looksLikeAsset(resolved)) continue;
+
           if (originOf(resolved) === resolvedOrigin && !seen.has(resolved)) queue.push(resolved);
         }
       }
 
       // --- check the links -------------------------------------------------
-      const broken: BrokenLink[] = [];
+      // Keyed by destination: one entry per dead URL, counting the pages that link to it.
+      const brokenByUrl = new Map<string, BrokenLink>();
+      const linkCounts = new Map<string, number>();
+      for (const link of outbound) {
+        linkCounts.set(link.to, (linkCounts.get(link.to) ?? 0) + 1);
+      }
+      const markBroken = (link: { from: string; to: string }, status: number): void => {
+        const existing = brokenByUrl.get(link.to);
+        if (existing) return;
+        brokenByUrl.set(link.to, {
+          ...link,
+          status,
+          occurrences: linkCounts.get(link.to) ?? 1,
+        });
+      };
+
       const checked = new Set<string>(statuses.keys());
       let checks = 0;
 
@@ -256,7 +347,7 @@ export function createSiteCrawler(config: CrawlerConfig): SiteCrawler {
 
         const known = statuses.get(link.to);
         if (known !== undefined) {
-          if (known >= 400 || known === 0) broken.push({ ...link, status: known });
+          if (known >= 400 || known === 0) markBroken(link, known);
           continue;
         }
         if (checked.has(link.to)) continue;
@@ -276,11 +367,11 @@ export function createSiteCrawler(config: CrawlerConfig): SiteCrawler {
         try {
           const probe = await requestText(link.to, { ...options, method: 'GET' });
           statuses.set(link.to, probe.status);
-          if (probe.status >= 400) broken.push({ ...link, status: probe.status });
+          if (probe.status >= 400) markBroken(link, probe.status);
         } catch {
           // The type documents 0 as "the host did not respond at all".
           statuses.set(link.to, 0);
-          broken.push({ ...link, status: 0 });
+          markBroken(link, 0);
         }
       }
 
@@ -303,7 +394,7 @@ export function createSiteCrawler(config: CrawlerConfig): SiteCrawler {
         value: {
           final_url: finalUrl,
           pages,
-          broken_links: broken,
+          broken_links: [...brokenByUrl.values()],
           robots_txt: robotsTxt,
           sitemap_urls: sitemaps,
         },

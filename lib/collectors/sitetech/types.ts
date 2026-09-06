@@ -33,10 +33,19 @@ export interface CrawledPage {
 }
 
 export interface BrokenLink {
+  /** One page linking to it. See `occurrences` for how many do. */
   from: string;
   to: string;
   /** 0 when the host did not respond at all. */
   status: number;
+  /**
+   * How many crawled pages link to this URL.
+   *
+   * One entry per dead destination, not per link. A single obfuscated email address in a
+   * site-wide footer is one broken link on sixteen pages, and reporting "16 broken links"
+   * to a prospect who then finds one is the kind of wrong that costs the whole report.
+   */
+  occurrences: number;
 }
 
 export interface CrawlResult {
