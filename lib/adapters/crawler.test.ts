@@ -809,3 +809,31 @@ describe('things a real site does that a fixture does not', () => {
     assert.ok(!asked.some((u) => u.includes('cdn-cgi')));
   });
 });
+
+describe('the crawler records what happened and judges nothing', () => {
+  test('a refused link and a dead link are both recorded, with their status', async () => {
+    const impl = (async (url: string) => {
+      const key = url.replace(/\/$/, '') === HOST ? `${HOST}/` : url;
+      if (key.includes('yell.example')) {
+        return { ok: false, status: 403, url: key, headers: { get: () => null }, text: async () => 'Forbidden' } as unknown as Response;
+      }
+      if (key.includes('gone.example')) {
+        return { ok: false, status: 404, url: key, headers: { get: () => null }, text: async () => 'Not found' } as unknown as Response;
+      }
+      const body = key.endsWith('/robots.txt')
+        ? ['User-agent: *', 'Allow: /', ''].join('\n')
+        : page('Roofers', `${FILLER}<a href="https://yell.example/biz/x">Yell</a><a href="https://gone.example/x">Dead</a>`);
+      return { ok: true, status: 200, url: key, headers: { get: () => null }, text: async () => body } as unknown as Response;
+    }) as unknown as typeof fetch;
+
+    const crawler = createSiteCrawler({ contactUrl: CONTACT, fetchImpl: impl, sleep: async () => {} });
+    const { value } = await crawler.crawl(HOST);
+
+    // Both are kept with their status. Which of them is a *finding* is normalise's call,
+    // so changing that rule re-scores scans already on disk rather than needing a re-crawl.
+    assert.deepEqual(
+      value.broken_links.map((b) => [b.to, b.status]).sort(),
+      [['https://gone.example/x', 404], ['https://yell.example/biz/x', 403]],
+    );
+  });
+});

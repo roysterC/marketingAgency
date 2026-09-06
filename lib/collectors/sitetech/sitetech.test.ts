@@ -11,6 +11,7 @@ import {
   THIN_CONTENT_WORDS,
   blocksEverything,
   duplicateTitles,
+  isBrokenStatus,
   normaliseSiteTech,
 } from './normalise';
 import {
@@ -396,5 +397,185 @@ describe('expandSeed', () => {
     assert.equal(expandSeed({ code: 'TECH_LCP_POOR', evidence: {} }, 't').measured_unit, 'seconds');
     assert.equal(expandSeed({ code: 'TECH_INP_POOR', evidence: {} }, 't').measured_unit, 'ms');
     assert.equal(expandSeed({ code: 'TECH_CLS_POOR', evidence: {} }, 't').measured_unit, 'score');
+  });
+});
+
+// ------------------------------------------------- CMS machinery vs real pages
+
+/**
+ * The live scan reported `/author/admin/` as TECH_INDEXATION_BLOCKED at **critical** — the
+ * highest severity in the taxonomy — for a WordPress author archive that is noindexed
+ * because it should be. It also called that page and `/category/blog/` thin content, when
+ * neither is content.
+ */
+describe('a CMS index page is not a page the business wrote', () => {
+  const pageOf = (url: string, over: Partial<CrawlResult['pages'][number]> = {}) => ({
+    url,
+    status: 200,
+    title: `Title for ${url}`,
+    word_count: 800,
+    schema_types: ['LocalBusiness'],
+    noindex: false,
+    ...over,
+  });
+
+  const crawlWith = (pages: CrawlResult['pages']): CrawlResult => ({
+    final_url: 'https://roofers.example/',
+    pages,
+    broken_links: [],
+    robots_txt: 'User-agent: *\nAllow: /\n',
+    sitemap_urls: ['https://roofers.example/sitemap.xml'],
+  });
+
+  test('a noindexed author archive or basket is correct practice, not a critical finding', () => {
+    const seeds = normaliseSiteTech(
+      capture(
+        crawlWith([
+          pageOf('https://roofers.example/'),
+          pageOf('https://roofers.example/author/admin/', { noindex: true, word_count: 252 }),
+          pageOf('https://roofers.example/basket/', { noindex: true, word_count: 120 }),
+          pageOf('https://roofers.example/category/blog/', { word_count: 250 }),
+        ]),
+        null,
+      ),
+      smb,
+    );
+
+    assert.equal(codes(seeds).includes('TECH_INDEXATION_BLOCKED'), false);
+    assert.equal(codes(seeds).includes('TECH_THIN_CONTENT'), false);
+  });
+
+  test('a noindexed article is still the real finding it always was', () => {
+    const seeds = normaliseSiteTech(
+      capture(
+        crawlWith([
+          pageOf('https://roofers.example/'),
+          pageOf('https://roofers.example/author/admin/', { noindex: true }),
+          // A guide someone wrote and then accidentally hid from search.
+          pageOf('https://roofers.example/guide-to-choosing-a-roofer/', { noindex: true }),
+        ]),
+        null,
+      ),
+      smb,
+    );
+
+    const blocked = seeds.find((s) => s.code === 'TECH_INDEXATION_BLOCKED');
+    assert.ok(blocked, 'the article should still be reported');
+    assert.equal(blocked.measured_value, 1);
+    assert.deepEqual(blocked.evidence.noindex_pages, [
+      'https://roofers.example/guide-to-choosing-a-roofer/',
+    ]);
+    // The denominator is content pages, and what was left out is stated rather than hidden.
+    assert.equal(blocked.evidence.content_pages, 2);
+    assert.equal(blocked.evidence.cms_pages_excluded, 1);
+    assert.match(String(blocked.measured_text), /content pages/);
+  });
+
+  test('a thin page the business wrote is still thin', () => {
+    const seeds = normaliseSiteTech(
+      capture(
+        crawlWith([
+          pageOf('https://roofers.example/'),
+          pageOf('https://roofers.example/flat-roofing/', { word_count: 40 }),
+          pageOf('https://roofers.example/tag/felt/', { word_count: 30 }),
+        ]),
+        null,
+      ),
+      smb,
+    );
+
+    const thin = seeds.find((s) => s.code === 'TECH_THIN_CONTENT');
+    assert.ok(thin);
+    assert.equal(thin.measured_value, 1);
+    assert.deepEqual(
+      (thin.evidence.examples as Array<{ url: string }>).map((e) => e.url),
+      ['https://roofers.example/flat-roofing/'],
+    );
+  });
+
+  test('a shop category is a real landing page, and is judged as one', () => {
+    // Deliberately not machinery: /collections/ and /product-category/ rank and sell.
+    const seeds = normaliseSiteTech(
+      capture(
+        crawlWith([
+          pageOf('https://roofers.example/'),
+          pageOf('https://roofers.example/collections/tiles/', { word_count: 20 }),
+        ]),
+        null,
+      ),
+      dtc,
+    );
+    assert.equal(codes(seeds).includes('TECH_THIN_CONTENT'), true);
+  });
+});
+
+describe('a link that refuses us is not a link that is dead', () => {
+  test('404, 410, 5xx and no-response are broken', () => {
+    for (const status of [0, 404, 410, 500, 502, 503]) {
+      assert.equal(isBrokenStatus(status), true, String(status));
+    }
+  });
+
+  test('401, 403 and 429 are not', () => {
+    // Bot protection, a login wall, a rate limit. The link works for the person clicking it.
+    for (const status of [401, 403, 429]) {
+      assert.equal(isBrokenStatus(status), false, String(status));
+    }
+  });
+
+  test('a directory refusing our crawler is not reported, and the count says so', () => {
+    const crawl: CrawlResult = {
+      final_url: 'https://roofers.example/',
+      pages: [
+        {
+          url: 'https://roofers.example/',
+          status: 200,
+          title: 'Roofers',
+          word_count: 900,
+          schema_types: ['LocalBusiness'],
+          noindex: false,
+        },
+      ],
+      broken_links: [
+        // Yell's bot protection. The live scan called this a broken link.
+        { from: 'https://roofers.example/', to: 'https://www.yell.com/biz/x', status: 403, occurrences: 1 },
+        { from: 'https://roofers.example/', to: 'https://roofers.example/quote', status: 404, occurrences: 3 },
+      ],
+      robots_txt: 'User-agent: *\nAllow: /\n',
+      sitemap_urls: ['https://roofers.example/sitemap.xml'],
+    };
+
+    const seed = normaliseSiteTech(capture(crawl, null), smb).find(
+      (s) => s.code === 'TECH_BROKEN_LINKS',
+    );
+    assert.ok(seed);
+    assert.equal(seed.measured_value, 1);
+    assert.equal(seed.evidence.refused_not_counted, 1);
+    assert.deepEqual(
+      (seed.evidence.examples as Array<{ to: string }>).map((e) => e.to),
+      ['https://roofers.example/quote'],
+    );
+  });
+
+  test('every refusal means no finding at all, not a zero', () => {
+    const crawl: CrawlResult = {
+      final_url: 'https://roofers.example/',
+      pages: [
+        {
+          url: 'https://roofers.example/',
+          status: 200,
+          title: 'Roofers',
+          word_count: 900,
+          schema_types: ['LocalBusiness'],
+          noindex: false,
+        },
+      ],
+      broken_links: [
+        { from: 'https://roofers.example/', to: 'https://www.yell.com/biz/x', status: 403, occurrences: 1 },
+      ],
+      robots_txt: 'User-agent: *\nAllow: /\n',
+      sitemap_urls: ['https://roofers.example/sitemap.xml'],
+    };
+    assert.equal(codes(normaliseSiteTech(capture(crawl, null), smb)).includes('TECH_BROKEN_LINKS'), false);
   });
 });

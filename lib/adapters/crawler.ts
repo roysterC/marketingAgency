@@ -323,7 +323,12 @@ export function createSiteCrawler(config: CrawlerConfig): SiteCrawler {
       }
 
       // --- check the links -------------------------------------------------
-      // Keyed by destination: one entry per dead URL, counting the pages that link to it.
+      // Keyed by destination: one entry per failing URL, counting the pages that link to it.
+      //
+      // This records what happened — a status code — and does not decide what it means. A
+      // 403 is bot protection and a 404 is a dead page, and which of those counts as
+      // "broken" is a rule that has already changed once. Rules belong in normalise, where
+      // changing one re-scores every scan already captured for free (CLAUDE.md rule 3).
       const brokenByUrl = new Map<string, BrokenLink>();
       const linkCounts = new Map<string, number>();
       for (const link of outbound) {
@@ -367,7 +372,7 @@ export function createSiteCrawler(config: CrawlerConfig): SiteCrawler {
         try {
           const probe = await requestText(link.to, { ...options, method: 'GET' });
           statuses.set(link.to, probe.status);
-          if (probe.status >= 400) markBroken(link, probe.status);
+          if (probe.status >= 400 || probe.status === 0) markBroken(link, probe.status);
         } catch {
           // The type documents 0 as "the host did not respond at all".
           statuses.set(link.to, 0);

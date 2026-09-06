@@ -85,6 +85,64 @@ export function blocksEverything(robotsTxt: string | null): boolean {
   return false;
 }
 
+/**
+ * Whether a status means the link is dead, as opposed to closed to us.
+ *
+ * 404 and 410 are the destination saying it is not there. 0 is no response at all. A 5xx is
+ * a user-facing failure at the moment of measurement, so it counts too.
+ *
+ * 401, 403 and 429 do not. They mean *this crawler* was refused — bot protection, a login
+ * wall, a rate limit — and the link works perfectly for the person clicking it. The live
+ * scan reported a competitor's Yell listing as broken on a 403 from Yell's bot protection.
+ * Calling that a broken link is the same error as ignoring robots.txt: treating "you may
+ * not look" as "there is nothing there".
+ *
+ * This lives here rather than in the crawler because it is a rule, not a fact. The crawler
+ * records the status; changing what a status means re-scores every scan already captured.
+ */
+export function isBrokenStatus(status: number): boolean {
+  return status === 0 || status === 404 || status === 410 || (status >= 500 && status < 600);
+}
+
+/**
+ * URLs a CMS generates rather than pages a business wrote.
+ *
+ * Author archives, tag and date listings, baskets, checkouts, feeds. They are short by
+ * nature and routinely noindexed *on purpose* — noindexing `/author/admin/` or `/basket/`
+ * is correct practice, not a defect.
+ *
+ * The live scan reported `/author/admin/` as `TECH_INDEXATION_BLOCKED` at **critical**, the
+ * highest severity in the taxonomy, for a WordPress author archive doing exactly what it
+ * should. It also called that page and `/category/blog/` thin content, when neither is
+ * content at all.
+ *
+ * Deliberately conservative. Shopify `/collections/` and WooCommerce `/product-category/`
+ * are real landing pages that rank and sell, so they are not here — a false negative costs
+ * a finding, a false positive costs the report's credibility.
+ *
+ * This is computed from the URL at normalise time rather than recorded during the crawl, so
+ * improving the list re-scores every scan already captured (CLAUDE.md rule 3).
+ */
+const CMS_MACHINERY = [
+  /^\/author\//i,
+  /^\/(?:category|tag|tags)\//i,
+  /^\/\d{4}\/(?:\d{2}\/)?$/, // date archives: /2024/ and /2024/05/
+  /^\/page\/\d+\/?$/i, // pagination
+  /^\/(?:basket|cart|checkout|my-account|account|login|register)\/?$/i,
+  /^\/(?:feed|rss|atom)\/?$/i,
+  /^\/wp-(?:json|admin|content|includes)\//i,
+  /^\/(?:search|\?s=)/i,
+  /^\/comments\//i,
+];
+
+export function isCmsMachinery(url: string): boolean {
+  try {
+    return CMS_MACHINERY.some((p) => p.test(new URL(url).pathname));
+  } catch {
+    return false;
+  }
+}
+
 /** Titles appearing on more than one page, with the pages that share them. */
 export function duplicateTitles(pages: CrawledPage[]): Map<string, string[]> {
   const byTitle = new Map<string, string[]>();
@@ -128,7 +186,10 @@ export function normaliseSiteTech(
     }
 
     // --- indexation --------------------------------------------------------
-    const noindexed = pages.filter((p) => p.noindex);
+    // Content pages only. A noindexed basket or author archive is the CMS being configured
+    // correctly, and reporting it critical trains the reader to distrust the severity.
+    const content = pages.filter((p) => !isCmsMachinery(p.url));
+    const noindexed = content.filter((p) => p.noindex);
     const siteWideBlock = blocksEverything(crawl.robots_txt);
 
     if (noindexed.length > 0 || siteWideBlock) {
@@ -137,11 +198,15 @@ export function normaliseSiteTech(
         measured_value: siteWideBlock ? pages.length : noindexed.length,
         measured_text: siteWideBlock
           ? 'robots.txt blocks the whole site'
-          : `${noindexed.length} of ${pages.length} pages`,
+          : `${noindexed.length} of ${content.length} content pages`,
         evidence: {
           robots_txt_blocks_all: siteWideBlock,
           noindex_pages: quote(noindexed.map((p) => p.url)),
           noindex_count: noindexed.length,
+          content_pages: content.length,
+          // Named so the number is checkable: excluded pages are archives and baskets that
+          // are supposed to be noindexed, not pages we failed to look at.
+          cms_pages_excluded: pages.length - content.length,
           pages_crawled: pages.length,
         },
       });
@@ -200,13 +265,19 @@ export function normaliseSiteTech(
     }
 
     // --- broken links ------------------------------------------------------
-    if (brokenLinks.length > 0) {
+    // The capture holds every link that did not succeed; only the ones that are genuinely
+    // gone are a finding. A 403 is a directory refusing our crawler, not a dead link.
+    const dead = brokenLinks.filter((l) => isBrokenStatus(l.status));
+    if (dead.length > 0) {
       emit({
         code: 'TECH_BROKEN_LINKS',
-        measured_value: brokenLinks.length,
+        measured_value: dead.length,
         evidence: {
-          broken_count: brokenLinks.length,
-          examples: brokenLinks.slice(0, MAX_QUOTED),
+          broken_count: dead.length,
+          // Distinguishes "we were refused" from "it is not there", so the number is
+          // checkable and the difference is visible rather than silently dropped.
+          refused_not_counted: brokenLinks.length - dead.length,
+          examples: dead.slice(0, MAX_QUOTED),
         },
       });
     }
@@ -223,14 +294,18 @@ export function normaliseSiteTech(
     }
 
     // --- thin content ------------------------------------------------------
-    const thin = pages.filter((p) => p.word_count < THIN_CONTENT_WORDS);
+    // An archive listing is short because it is a list. Only pages the business wrote are
+    // judged on how much is on them.
+    const thin = content.filter((p) => p.word_count < THIN_CONTENT_WORDS);
     if (thin.length > 0) {
       emit({
         code: 'TECH_THIN_CONTENT',
         measured_value: thin.length,
-        measured_text: `${thin.length} of ${pages.length} pages`,
+        measured_text: `${thin.length} of ${content.length} content pages`,
         evidence: {
           thin_count: thin.length,
+          content_pages: content.length,
+          cms_pages_excluded: pages.length - content.length,
           pages_crawled: pages.length,
           threshold_words: THIN_CONTENT_WORDS,
           examples: thin
