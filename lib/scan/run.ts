@@ -54,10 +54,35 @@ export interface ScanInput {
   segment?: Segment;
 }
 
+/**
+ * What the resolve stage learned, for collectors that cannot be built without it.
+ *
+ * Two of them cannot. `localrank` queries the map pack at a point on the earth, and that
+ * point is the subject's location — hardcode it and the collector measures rankings
+ * somewhere nobody lives. `aivis` decides whether a model named a business by matching
+ * against a roster, and the roster is the subject plus the competitors resolve just chose;
+ * without it every citation matches nobody and every target reports zero AI visibility,
+ * which is a fabricated finding rather than a missing one.
+ *
+ * Neither is knowable when the CLI wires its dependencies, because resolve has not run.
+ * Hence a factory rather than an array.
+ */
+export interface CollectorContext {
+  subject: Place;
+  competitors: Place[];
+  /** The money keywords the scan resolved against. */
+  keywords: string[];
+  vertical: string | null;
+  region: string | null;
+}
+
+export type CollectorFactory = (ctx: CollectorContext) => AnyCollector[];
+
 export interface ScanDeps {
   store: ScanStore;
   providers: ResolveProviders;
-  collectors: AnyCollector[];
+  /** An array when the set is fixed, a factory when it depends on what resolve found. */
+  collectors: AnyCollector[] | CollectorFactory;
   writer: NarrativeWriter;
   /** Injected so a scan's timestamps and date-sensitive rules are testable. */
   now?: () => Date;
@@ -89,7 +114,7 @@ interface Target {
 }
 
 export async function runScan(input: ScanInput, deps: ScanDeps): Promise<ScanResult> {
-  const { store, providers, collectors, writer } = deps;
+  const { store, providers, writer } = deps;
   const now = deps.now ?? (() => new Date());
   const mode = input.mode ?? 'cold';
   const segment = input.segment ?? 'smb';
@@ -165,6 +190,18 @@ export async function runScan(input: ScanInput, deps: ScanDeps): Promise<ScanRes
     { row: rows[0]!, place: subject },
     ...competitors.map((c, i) => ({ row: rows[i + 1]!, place: c.place })),
   ];
+
+  // Built here rather than passed in: see `CollectorContext`.
+  const collectors =
+    typeof deps.collectors === 'function'
+      ? deps.collectors({
+          subject,
+          competitors: competitors.map((c) => c.place),
+          keywords: resolved.keyword_set,
+          vertical,
+          region,
+        })
+      : deps.collectors;
 
   say('collecting', `${collectors.length} collectors across ${targets.length} businesses`);
   await store.updateScan(scan.id, { status: 'collecting' });
@@ -370,7 +407,9 @@ function normaliseAll(
  */
 export async function renormalise(
   scanId: Uuid,
-  deps: Pick<ScanDeps, 'store' | 'collectors' | 'now'> & { segment?: Segment },
+  // A plain array, not a factory: re-normalising reads captures off disk and never resolves,
+  // so there is no subject to build a context from. Normalise rules do not need one.
+  deps: Pick<ScanDeps, 'store' | 'now'> & { collectors: AnyCollector[]; segment?: Segment },
 ): Promise<Finding[]> {
   const { store, collectors } = deps;
   const now = (deps.now ?? (() => new Date()))();

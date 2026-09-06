@@ -21,8 +21,8 @@ import { join } from 'node:path';
 
 import { loadDotEnv, missingCredentials } from '../lib/adapters/config.ts';
 import { createFileScanStore, DEFAULT_STORE_PATH } from '../lib/db/file.ts';
-import { runScan, type ProgressEvent } from '../lib/scan/run.ts';
-import { erase, type AnyCollector } from '../lib/collectors/types.ts';
+import { runScan, type CollectorFactory, type ProgressEvent } from '../lib/scan/run.ts';
+import { erase } from '../lib/collectors/types.ts';
 import type { ResolveProviders } from '../lib/resolve/providers.ts';
 import type { NarrativeWriter } from '../lib/analyse/index.ts';
 
@@ -49,7 +49,8 @@ function usage(): never {
   ${bold('npm run scan')} -- --domain riversideplumbing.example
 
   ${dim('--fixtures')}   run against fixtures. No keys, no network, no spend
-  ${dim('--keywords')}   comma-separated money keywords for the map pack sweep
+  ${dim('--keywords')}   comma-separated money keywords. Required for a live scan:
+                competitors are chosen from the map pack for these terms
   ${dim('--out')}        where to write reports (default .scans)
   ${dim('--list')}       list previous scans and stop
 `);
@@ -109,7 +110,7 @@ const keywords = (flag('keywords') ?? '')
  */
 async function wire(): Promise<{
   providers: ResolveProviders;
-  collectors: AnyCollector[];
+  collectors: CollectorFactory;
   writer: NarrativeWriter;
   keywords: string[];
 }> {
@@ -123,7 +124,7 @@ async function wire(): Promise<{
 
     return {
       providers: fixtureProviders,
-      collectors: [
+      collectors: () => [
         erase(createGbpCollector(fixtureGbpProvider)),
         erase(createReviewsCollector(fixtureReviewsProvider)),
       ],
@@ -143,14 +144,28 @@ async function wire(): Promise<{
     process.exit(1);
   }
 
+  // Competitor selection is entirely driven by the map pack sweep, so no keywords means no
+  // sweep, no candidates and a "teardown" comparing the subject against nobody. It fails
+  // here rather than producing that report.
+  if (keywords.length === 0) {
+    console.error(
+      red('\n  --keywords is required for a live scan.') +
+        dim(
+          '\n  Competitors are chosen from the map pack for these terms, so without them the' +
+            '\n  scan resolves the subject and finds nobody to compare it against.' +
+            '\n\n  --keywords "emergency roofer birmingham,roof repair birmingham"\n',
+        ),
+    );
+    process.exit(1);
+  }
+
   const { placesConfigFromEnv, createPlacesProvider, createGbpProvider, createPlacesReviewSampleProvider } =
     await import('../lib/adapters/places.ts');
   const { dataForSeoConfigFromEnv, createSerpProvider, createReviewsProvider } = await import(
     '../lib/adapters/dataforseo.ts'
   );
   const { createVitalsProvider, pageSpeedConfigFromEnv } = await import('../lib/adapters/pagespeed.ts');
-  const { createSiteCrawler } = await import('../lib/adapters/crawler.ts');
-  const { createReadOnlyProbe } = await import('../lib/adapters/speedtolead.ts');
+  const { createPageFetcher, createSiteCrawler } = await import('../lib/adapters/crawler.ts');
   const { answerSourcesFromEnv, claudeExtractor, createAivisProvider, scanPromptCache } =
     await import('../lib/adapters/aivis.ts');
   const { createNarrativeWriter, writerConfigFromEnv } = await import('../lib/adapters/writer.ts');
@@ -159,17 +174,27 @@ async function wire(): Promise<{
   const { createReviewsCollector } = await import('../lib/collectors/reviews/index.ts');
   const { createSiteTechCollector } = await import('../lib/collectors/sitetech/index.ts');
   const { createLocalRankCollector, scanSerpCache } = await import('../lib/collectors/localrank/index.ts');
+  const { createAivisCollector, NO_KNOWN_FACTS } = await import('../lib/collectors/aivis/index.ts');
 
   const places = placesConfigFromEnv();
   const dfs = dataForSeoConfigFromEnv();
+
+  // One cache instance shared by resolve and localrank. They ask for the same keywords at
+  // the same point, so this is the difference between one round of SERP calls and two.
   const serp = scanSerpCache(createSerpProvider(dfs));
-  const pages = (await import('../lib/resolve/fixtures.ts')).fixtureProviders.pages;
 
   const contactUrl = process.env.CRAWLER_CONTACT_URL ?? 'https://example.invalid/crawler';
 
   return {
-    providers: { places: createPlacesProvider(places), serp, pages },
-    collectors: [
+    providers: {
+      places: createPlacesProvider(places),
+      serp,
+      pages: createPageFetcher({ contactUrl }),
+    },
+
+    // Built after resolve — `near` and the aivis roster are both facts about the resolved
+    // business, and guessing either produces confident nonsense rather than a thin report.
+    collectors: (ctx) => [
       erase(createGbpCollector(createGbpProvider(places))),
       erase(
         createReviewsCollector(
@@ -184,44 +209,39 @@ async function wire(): Promise<{
       ),
       erase(
         createLocalRankCollector(serp, {
-          near: { lat: 0, lng: 0 },
-          keywords: keywords.map((term) => ({ term, money: true })),
+          near: { lat: ctx.subject.lat, lng: ctx.subject.lng },
+          keywords: ctx.keywords.map((term) => ({ term, money: true })),
         }),
       ),
       erase(
-        createAivisCollectorFrom(
-          await import('../lib/collectors/aivis/index.ts'),
+        createAivisCollector(
           scanPromptCache(
             createAivisProvider({
               sources: answerSourcesFromEnv(),
               extractor: claudeExtractor(),
-              roster: [],
+              // Every business in the scan. A citation the extractor cannot place against
+              // this list matches nobody, and an empty roster therefore reports the whole
+              // set as invisible to AI whatever the models actually said.
+              roster: [ctx.subject, ...ctx.competitors].map((p) => ({
+                place_id: p.place_id,
+                name: p.name,
+              })),
             }),
           ),
-          keywords,
+          {
+            // The real category, not a placeholder. This selects the prompt set and labels
+            // the benchmark the finding is compared against.
+            vertical: ctx.vertical ?? 'unknown',
+            models: ['claude'],
+            prompts: ctx.keywords,
+          },
+          NO_KNOWN_FACTS,
         ),
       ),
     ],
     writer: createNarrativeWriter(writerConfigFromEnv()),
     keywords,
   };
-}
-
-/** Keeps the aivis wiring readable — it needs a prompt set rather than a plain provider. */
-function createAivisCollectorFrom(
-  module: typeof import('../lib/collectors/aivis/index.ts'),
-  provider: Parameters<typeof module.createAivisCollector>[0],
-  moneyKeywords: string[],
-): ReturnType<typeof module.createAivisCollector> {
-  return module.createAivisCollector(
-    provider,
-    {
-      vertical: 'trades.plumbing',
-      models: ['claude'],
-      prompts: moneyKeywords.length > 0 ? moneyKeywords : ['best plumber in Wandsworth'],
-    },
-    module.NO_KNOWN_FACTS,
-  );
 }
 
 // --- run --------------------------------------------------------------------

@@ -6,6 +6,7 @@ import { createSiteTechCollector } from '../collectors/sitetech/index';
 import {
   CLIENT_RENDERED_WORDS,
   ClientRenderedSite,
+  createPageFetcher,
   createSiteCrawler,
   looksClientRendered,
   userAgentFor,
@@ -578,5 +579,76 @@ describe('a site that will not load', () => {
     const { value } = await crawler.crawl(HOST);
     assert.deepEqual(value.pages, []);
     assert.equal(value.robots_txt, null);
+  });
+});
+
+// -------------------------------------------------------------- page fetcher
+
+describe('fetching a homepage for platform detection', () => {
+  const respond = (
+    body: string,
+    init: { status?: number; headers?: Record<string, string> } = {},
+  ): typeof fetch =>
+    (async () =>
+      new Response(body, {
+        status: init.status ?? 200,
+        headers: init.headers ?? {},
+      })) as unknown as typeof fetch;
+
+  test('returns markup and lowercased headers', async () => {
+    const fetcher = createPageFetcher({
+      contactUrl: CONTACT,
+      fetchImpl: respond('<html><body>hi</body></html>', {
+        headers: { 'X-Powered-By': 'Shopify' },
+      }),
+    });
+
+    const { value } = await fetcher.fetch('https://roofers.test');
+    assert.ok(value);
+    assert.match(value.html, /hi/);
+    // detectPlatform reads headers by lowercase name; a raw Headers object would miss this.
+    assert.equal(value.headers['x-powered-by'], 'Shopify');
+  });
+
+  test('identifies itself, because we are on someone else\'s server', async () => {
+    let sent: Record<string, string> = {};
+    const fetcher = createPageFetcher({
+      contactUrl: CONTACT,
+      fetchImpl: (async (_url: string, init: RequestInit) => {
+        sent = init.headers as Record<string, string>;
+        return new Response('<html></html>', { status: 200 });
+      }) as unknown as typeof fetch,
+    });
+
+    await fetcher.fetch('https://roofers.test');
+    assert.equal(sent['user-agent'], userAgentFor(CONTACT));
+    assert.match(sent['user-agent']!, /\+https:\/\//);
+  });
+
+  test('a bare domain is fetched over https', async () => {
+    let asked = '';
+    const fetcher = createPageFetcher({
+      contactUrl: CONTACT,
+      fetchImpl: (async (url: string) => {
+        asked = url;
+        return new Response('<html></html>', { status: 200 });
+      }) as unknown as typeof fetch,
+    });
+
+    // Places returns domains, not URLs.
+    await fetcher.fetch('roofers.test');
+    assert.equal(asked, 'https://roofers.test');
+  });
+
+  test('a dead homepage is unknown, not a platform', async () => {
+    const fetcher = createPageFetcher({
+      contactUrl: CONTACT,
+      fetchImpl: respond('not found', { status: 404 }),
+    });
+
+    // Null makes resolve warn and leave businesses.platform null. Returning the error page
+    // would let detectPlatform match a signature in a hosting company's 404 template.
+    const { value } = await fetcher.fetch('https://roofers.test');
+    assert.equal(value, null);
   });
 });

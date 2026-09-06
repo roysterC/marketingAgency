@@ -325,3 +325,55 @@ describe('progress', () => {
     assert.deepEqual(stages, ['resolving', 'collecting', 'normalising', 'analysing', 'rendering']);
   });
 });
+
+// ------------------------------------------------- collectors built from resolve
+
+describe('collectors that depend on what resolve found', () => {
+  test('a factory is handed the resolved subject and competitors', async () => {
+    let seen: Parameters<import('./run').CollectorFactory>[0] | null = null;
+
+    await runScan(
+      INPUT,
+      deps({
+        collectors: (ctx) => {
+          seen = ctx;
+          return [erase(createGbpCollector(fixtureGbpProvider))];
+        },
+      }),
+    );
+
+    assert.ok(seen, 'the factory should have been called');
+    const ctx = seen as unknown as Parameters<import('./run').CollectorFactory>[0];
+
+    // The bug this guards: `localrank` was wired with a hardcoded { lat: 0, lng: 0 } and
+    // `aivis` with an empty roster, because both were built before resolve had run. The
+    // first measures map rankings in the Gulf of Guinea; the second matches no citation to
+    // any business and reports every target as invisible to AI. Both are confident, wrong,
+    // and indistinguishable from a real result once rendered.
+    assert.equal(ctx.subject.name, 'Riverside Plumbing');
+    assert.notEqual(ctx.subject.lat, 0);
+    assert.notEqual(ctx.subject.lng, 0);
+    assert.ok(ctx.competitors.length > 0, 'competitors should be resolved before collecting');
+    assert.ok(ctx.competitors.every((c) => c.place_id));
+    assert.deepEqual(ctx.keywords, ['emergency plumber wandsworth']);
+  });
+
+  test('a plain array still works, so a fixed set needs no factory', async () => {
+    const result = await runScan(INPUT, deps());
+    assert.ok(result.findings.length > 0);
+  });
+
+  test('the factory runs once, not once per target', async () => {
+    let calls = 0;
+    await runScan(
+      INPUT,
+      deps({
+        collectors: () => {
+          calls += 1;
+          return [erase(createGbpCollector(fixtureGbpProvider))];
+        },
+      }),
+    );
+    assert.equal(calls, 1);
+  });
+});

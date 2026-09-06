@@ -19,13 +19,14 @@
  * behind auth is touched. These sites belong to businesses who never asked to be audited.
  */
 
-import type { Cost, Priced } from '../resolve/providers';
+import type { Cost, PageFetcher, Priced } from '../resolve/providers';
 import type {
   BrokenLink,
   CrawlResult,
   CrawledPage,
   SiteCrawler,
 } from '../collectors/sitetech/types';
+import type { PageResponse } from '../resolve/platform';
 import { readPage, resolveUrl, sitemapUrlsFrom } from './html';
 import { requestText, type TextResponse } from './http';
 import {
@@ -313,3 +314,49 @@ export function createSiteCrawler(config: CrawlerConfig): SiteCrawler {
 }
 
 export { sitemapUrlsFrom };
+
+/**
+ * A `PageFetcher` over plain HTTP, for the platform detection in the resolve stage.
+ *
+ * Small, but it has to be real. Platform detection writes to `businesses.platform`, which
+ * is a fact about a named company that a report can be built on — and the fixture fetcher
+ * answers WordPress or Shopify based on nothing but the string "quickfix" appearing in the
+ * URL. Pointing that at a live business does not degrade the scan, it fills the record with
+ * a confident wrong answer, which is worse than the null it would otherwise hold.
+ *
+ * One page, no crawl, no robots fetch: a homepage GET is what a browser does when the
+ * domain is typed in, and there is no link-following to hold back. It still identifies
+ * itself, because everything we send to someone else's server does.
+ */
+export function createPageFetcher(config: {
+  contactUrl: string;
+  timeoutMs?: number;
+  fetchImpl?: typeof fetch;
+  cost?: Cost;
+}): PageFetcher {
+  const { contactUrl, timeoutMs = 15_000, fetchImpl = fetch, cost = { pence: 0 } } = config;
+
+  return {
+    name: 'http-pages',
+
+    async fetch(url): Promise<Priced<PageResponse | null>> {
+      const target = /^https?:\/\//i.test(url) ? url : `https://${url}`;
+      const response = await requestText(target, {
+        timeoutMs,
+        fetchImpl,
+        headers: { 'user-agent': userAgentFor(contactUrl) },
+      });
+
+      // A 404 or a 500 on the homepage is not a platform we failed to detect, it is a site
+      // with nothing to detect. Null says "unknown", which is what resolve warns about.
+      if (response.status >= 400) return { value: null, cost };
+
+      const headers: Record<string, string> = {};
+      response.headers.forEach((value, key) => {
+        headers[key.toLowerCase()] = value;
+      });
+
+      return { value: { html: response.text, headers }, cost };
+    },
+  };
+}
