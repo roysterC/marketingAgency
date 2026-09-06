@@ -19,12 +19,19 @@
     "isolatedModules": true,
     "verbatimModuleSyntax": true,
     "resolveJsonModule": true,
+    // bin/ and scripts/ import with explicit .ts extensions, which tsx resolves at runtime.
+    "allowImportingTsExtensions": true,
 
     "baseUrl": ".",
     "paths": {
       "@/*": ["./*"]
     }
   },
-  "include": ["lib/**/*.ts"],
+  // bin/ and scripts/ are included deliberately. They were not, and every wiring bug found
+  // on the first live scan lived there: a hardcoded { lat: 0, lng: 0 }, an empty aivis
+  // roster, a fixture provider in the live path, and an import of scanPromptCache from a
+  // module that does not export it. The CLI is the only code that spends real money, and it
+  // was the only code tsc never looked at.
+  "include": ["lib/**/*.ts", "bin/**/*.mts", "scripts/**/*.mts"],
   "exclude": ["node_modules"]
 }

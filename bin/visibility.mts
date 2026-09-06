@@ -164,8 +164,10 @@ const roster: TrackedBusiness[] = (flag('watch') ?? '')
 const provider = has('fixtures')
   ? (await import('../lib/collectors/aivis/fixtures.ts')).fixtureAivisProvider()
   : await (async () => {
-      const { answerSourcesFromEnv, claudeExtractor, createAivisProvider, scanPromptCache } =
-        await import('../lib/adapters/aivis.ts');
+      const { answerSourcesFromEnv, claudeExtractor, createAivisProvider } = await import(
+        '../lib/adapters/aivis.ts'
+      );
+      const { scanPromptCache } = await import('../lib/collectors/aivis/index.ts');
       return scanPromptCache(
         createAivisProvider({
           sources: answerSourcesFromEnv(),

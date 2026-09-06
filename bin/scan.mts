@@ -166,15 +166,20 @@ async function wire(): Promise<{
   );
   const { createVitalsProvider, pageSpeedConfigFromEnv } = await import('../lib/adapters/pagespeed.ts');
   const { createPageFetcher, createSiteCrawler } = await import('../lib/adapters/crawler.ts');
-  const { answerSourcesFromEnv, claudeExtractor, createAivisProvider, scanPromptCache } =
-    await import('../lib/adapters/aivis.ts');
+  const { answerSourcesFromEnv, claudeExtractor, createAivisProvider } = await import(
+    '../lib/adapters/aivis.ts'
+  );
   const { createNarrativeWriter, writerConfigFromEnv } = await import('../lib/adapters/writer.ts');
 
   const { createGbpCollector } = await import('../lib/collectors/gbp/index.ts');
   const { createReviewsCollector } = await import('../lib/collectors/reviews/index.ts');
   const { createSiteTechCollector } = await import('../lib/collectors/sitetech/index.ts');
   const { createLocalRankCollector, scanSerpCache } = await import('../lib/collectors/localrank/index.ts');
-  const { createAivisCollector, NO_KNOWN_FACTS } = await import('../lib/collectors/aivis/index.ts');
+  // scanPromptCache belongs to the collector, not the adapter — it is the same
+  // one-purchase-per-scan wrapper localrank uses, and it lives beside the collector it caches.
+  const { createAivisCollector, scanPromptCache, NO_KNOWN_FACTS } = await import(
+    '../lib/collectors/aivis/index.ts'
+  );
 
   const places = placesConfigFromEnv();
   const dfs = dataForSeoConfigFromEnv();
