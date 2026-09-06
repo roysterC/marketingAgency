@@ -96,6 +96,19 @@ export function createLocalRankCollector(
         });
       }
 
+      // A dead keyword thins the section; every keyword dead is a dead source, and saying
+      // "ok" about it is the one outcome that helps nobody. The live scan recorded
+      // localrank as ok, 0p, having had all three map pack calls refused with 403 — a run
+      // that looks successful and a report silently missing its whole competitive half.
+      // Throwing puts the reason in collector_runs.error and a warning in front of the
+      // reader, which is what rule 5 asks for: degrade, and say why.
+      if (plan.keywords.length > 0 && ranks.length === 0) {
+        throw new Error(
+          `every map pack query failed (${failed.length}/${plan.keywords.length}): ` +
+            `${failed[0]?.message ?? 'unknown error'}`,
+        );
+      }
+
       return {
         value: {
           place_id: target.place.place_id,

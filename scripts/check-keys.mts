@@ -58,23 +58,58 @@ const LIVE: Record<string, () => Promise<Check>> = {
     return { ok: response.ok, detail: response.ok ? 'accepted (~3p)' : await reason(response) };
   },
 
+  /**
+   * Credentials, then capability — they are not the same fact.
+   *
+   * `appendix/user_data` answers 20000 with a balance on an account that cannot call a
+   * single data endpoint. An unverified account looks exactly like a working one there, and
+   * this check said "accepted, balance $1" about credentials whose every SERP call came
+   * back 403 / 40104 ("Please verify your account before using the API"). The first live
+   * scan found that out after paying for the subject lookup.
+   *
+   * So the second call is the endpoint the scan actually depends on. It costs a fraction of
+   * a penny, which is the point of --live being opt-in.
+   */
   async DATAFORSEO_LOGIN(): Promise<Check> {
     const auth = Buffer.from(`${env.DATAFORSEO_LOGIN}:${env.DATAFORSEO_PASSWORD}`).toString('base64');
-    const response = await fetch('https://api.dataforseo.com/v3/appendix/user_data', {
-      headers: { authorization: `Basic ${auth}` },
-    });
-    if (!response.ok) return { ok: false, detail: await reason(response) };
+    const headers = { authorization: `Basic ${auth}`, 'content-type': 'application/json' };
+
+    const identity = await fetch('https://api.dataforseo.com/v3/appendix/user_data', { headers });
+    if (!identity.ok) return { ok: false, detail: await reason(identity) };
 
     // DataForSEO reports auth failures in the body with a 200.
-    const body = (await response.json()) as { status_code?: number; tasks?: Array<{ result?: unknown }> };
+    const body = (await identity.json()) as { status_code?: number; tasks?: Array<{ result?: unknown }> };
     if (body.status_code !== 20000) return { ok: false, detail: `status_code ${body.status_code}` };
 
     const balance = (body.tasks?.[0] as { result?: Array<{ money?: { balance?: number } }> })
       ?.result?.[0]?.money?.balance;
-    return {
-      ok: true,
-      detail: balance === undefined ? 'accepted (free endpoint)' : `accepted, balance $${balance}`,
-    };
+    const funds = balance === undefined ? '' : `, balance $${balance}`;
+
+    // One real map pack call. Anything other than 20000 here means the scan cannot buy the
+    // data it is built on, whatever the credentials say.
+    const probe = await fetch('https://api.dataforseo.com/v3/serp/google/maps/live/advanced', {
+      method: 'POST',
+      headers,
+      body: JSON.stringify([
+        { keyword: 'plumber', language_code: 'en', location_code: 2826, depth: 1 },
+      ]),
+    });
+
+    if (!probe.ok) {
+      return { ok: false, detail: `credentials fine${funds}, but data endpoints refused: ${await reason(probe)}` };
+    }
+
+    const result = (await probe.json()) as { status_code?: number; status_message?: string };
+    if (result.status_code !== 20000) {
+      return {
+        ok: false,
+        detail:
+          `credentials fine${funds}, but data endpoints refused: ` +
+          `${result.status_code} ${result.status_message ?? ''}`.trim(),
+      };
+    }
+
+    return { ok: true, detail: `accepted, map pack live${funds} (~0.2p)` };
   },
 
   async ANTHROPIC_API_KEY(): Promise<Check> {

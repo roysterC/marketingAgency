@@ -414,14 +414,26 @@ describe('a dead keyword thins the section without failing the scan', () => {
     }
   });
 
-  test('every query failing returns an empty section rather than throwing', async () => {
+  test('every query failing is a dead source, not an empty section', async () => {
     const collector = createLocalRankCollector(deadSerpProvider, PLAN);
-    const { value, cost } = await collector.collect(target('p_riverside'), { mode: 'cold' });
 
-    assert.equal(value?.ranks.length, 0);
-    assert.equal(value?.failed_keywords.length, PLAN.keywords.length);
-    assert.equal(cost.pence, 0);
-    assert.deepEqual(collector.normalise(value, ctx()), []);
+    // The live scan recorded localrank as `ok`, 0p, with every map pack call refused
+    // 403 by an unverified DataForSEO account. A run that reports success while producing
+    // nothing hides the reason the report lost its whole competitive half.
+    //
+    // This does not fail the scan: runScan wraps every collect in `attempt`, so the throw
+    // becomes collector_runs.status = 'failed' with the reason in .error, plus a warning.
+    // That is rule 5 — degrade, and say why — rather than a silent success.
+    const n = PLAN.keywords.length;
+    await assert.rejects(
+      () => collector.collect(target('p_riverside'), { mode: 'cold' }),
+      (error: Error) => {
+        // The count and the provider's own reason, so collector_runs.error is actionable.
+        assert.ok(error.message.includes(`every map pack query failed (${n}/${n})`), error.message);
+        assert.ok(error.message.includes('SERP API unreachable'), error.message);
+        return true;
+      },
+    );
   });
 
   test('an empty pack is a real answer, not a failure', async () => {
