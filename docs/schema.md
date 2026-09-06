@@ -149,34 +149,72 @@ create table reports (
 
 ## Benchmark aggregation
 
-Recomputed on a schedule, not per-scan.
+Recomputed on a schedule, not per-scan. Implemented in
+[`lib/benchmarks/aggregate.ts`](../lib/benchmarks/aggregate.ts) and run with
+`npm run benchmarks`.
+
+**Suppress benchmark claims below `sample_size` 20.** Say "not enough comparable businesses yet"
+rather than quoting a percentile built on four data points — one shaky claim discredits the
+whole report.
+
+### Two corrections to the original sketch
+
+The first draft of this section grouped findings straight out of the table with `count(*)`.
+Both of those turned out to be wrong, and both are the kind of wrong that is invisible until a
+report quotes a number it should not have.
+
+**`sample_size` must count businesses, not measurements.** The same plumber is a competitor in
+five scans and gets measured five times. Counting every finding means a `sample_size` of 20
+could be four businesses measured five times each, and one well-scanned business could set the
+median on its own — which is precisely what the threshold above exists to prevent. Deduplicate
+to one value per `(business, code, metric)`, keeping the most recent.
+
+**Write a national bucket as well as a regional one.** Grouping by region alone means ten scans
+in SW18 will not put any code near 20 for months. The same measurements pooled nationally get
+there roughly six times faster, because every scan contributes a subject and five competitors,
+and `benchmarks(vertical, region)` already falls back to `region = null`. The regional row takes
+over once it has the samples to be the more specific answer.
+
+### The query, corrected
 
 ```sql
--- Sketch: percentiles per (vertical, region, code, metric)
 insert into benchmarks (vertical, region, code, metric, p25, p50, p75, sample_size, updated_at)
-select
-  b.vertical,
-  b.region,
-  f.code,
-  f.measured_unit as metric,
-  percentile_cont(0.25) within group (order by f.measured_value),
-  percentile_cont(0.50) within group (order by f.measured_value),
-  percentile_cont(0.75) within group (order by f.measured_value),
-  count(*),
-  now()
-from findings f
-join scan_targets t on t.id = f.target_id
-join businesses  b on b.id = t.business_id
-where f.measured_value is not null
-group by b.vertical, b.region, f.code, f.measured_unit
+with latest as (
+  -- One measurement per business per metric: the most recent. Without this, sample_size
+  -- counts scans rather than businesses.
+  select distinct on (t.business_id, f.code, f.measured_unit)
+    b.vertical, b.region, f.code, f.measured_unit as metric, f.measured_value as value
+  from findings f
+  join scan_targets t on t.id = f.target_id
+  join businesses  b on b.id = t.business_id
+  where f.measured_value is not null
+    and b.vertical is not null
+  order by t.business_id, f.code, f.measured_unit, f.normalised_at desc
+)
+-- Each measurement lands in its region's bucket and in the national one.
+select vertical, region, code, metric,
+       percentile_cont(0.25) within group (order by value),
+       percentile_cont(0.50) within group (order by value),
+       percentile_cont(0.75) within group (order by value),
+       count(*), now()
+from (
+  select vertical, region, code, metric, value from latest
+  union all
+  select vertical, null,   code, metric, value from latest
+) both
+group by vertical, region, code, metric
 on conflict (vertical, region, code, metric) do update set
   p25 = excluded.p25, p50 = excluded.p50, p75 = excluded.p75,
   sample_size = excluded.sample_size, updated_at = now();
 ```
 
-**Suppress benchmark claims below `sample_size` 20.** Say "not enough comparable businesses yet"
-rather than quoting a percentile built on four data points — one shaky claim discredits the
-whole report.
+Codes the registry marks `benchmarkable: false` are excluded. Binary findings carry no
+`measured_value`, so the `where` clause covers most of them, but the TypeScript implementation
+checks the registry directly rather than relying on that coincidence.
+
+`percentileCont` in the TypeScript version interpolates exactly as `percentile_cont` does. That
+is deliberate: the two must not produce different numbers for the same data, or moving to
+Postgres would quietly rewrite every historical comparison.
 
 ## Validation before render
 

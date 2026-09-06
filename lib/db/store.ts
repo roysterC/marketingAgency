@@ -31,6 +31,19 @@ import type {
   Uuid,
 } from '../types/index';
 import type { ScanStatus } from '../taxonomy/enums';
+import type { FindingCode } from '../taxonomy/findings';
+
+/** One business's measurement of one code, ready to be aggregated. */
+export interface BenchmarkRow {
+  business_id: Uuid;
+  vertical: string;
+  region: string | null;
+  code: FindingCode;
+  metric: string;
+  value: number;
+  /** Which measurement this is. The most recent wins when a business appears twice. */
+  measured_at: string;
+}
 
 /** A row before the database has given it an id or a timestamp. */
 export type New<T, K extends keyof T = never> = Omit<T, 'id' | K>;
@@ -89,6 +102,20 @@ export interface ScanStore {
    * the codes it must not quote rather than quoting a percentile built on four data points.
    */
   benchmarks(vertical: string | null, region: string | null): Promise<Benchmark[]>;
+
+  /**
+   * Every measurement that can feed a percentile, with its grouping keys joined on.
+   *
+   * One row per (business, code, metric) — deliberately *not* one per finding. The same
+   * plumber is a competitor in five scans and gets measured five times; counting all five
+   * would weight it five times in the percentile and make `sample_size` a count of
+   * measurements rather than of businesses, which is not what the suppression threshold
+   * means.
+   */
+  benchmarkRows(): Promise<BenchmarkRow[]>;
+
+  /** Replace the benchmark table wholesale. Recomputed on a schedule, not per scan. */
+  replaceBenchmarks(rows: Benchmark[]): Promise<void>;
 
   /** Every scan, newest first. What the CLI lists and the aggregation job walks. */
   listScans(limit?: number): Promise<Scan[]>;

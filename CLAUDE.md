@@ -156,6 +156,7 @@ npm run check:keys -- --live # one real call per provider to prove each key work
 
 npm run scan -- --name "X" --postcode "SW18 4AB" --fixtures   # whole pipeline, no keys
 npm run scan -- --list                                        # previous scans
+npm run benchmarks                                            # recompute percentiles
 ```
 
 `check:keys` is separate from `check` on purpose: the test suite must keep passing with no

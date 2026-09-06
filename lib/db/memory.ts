@@ -25,7 +25,9 @@ import type {
   ScanTarget,
   Uuid,
 } from '../types/index';
+import { FINDINGS } from '../taxonomy/findings';
 import type {
+  BenchmarkRow,
   NewBusiness,
   NewCollectorRun,
   NewRawCapture,
@@ -220,6 +222,50 @@ export class MemoryScanStore implements ScanStore {
     return this.state.benchmarks.filter(
       (b) => b.vertical === vertical && (b.region === region || b.region === null),
     );
+  }
+
+  /**
+   * Findings joined to the business that was measured, deduplicated to one row per
+   * (business, code, metric).
+   *
+   * The dedupe is the point. Percentiles are meant to describe a population of businesses,
+   * and the same plumber turns up as a competitor in scan after scan — keeping every
+   * measurement would let one well-scanned business set the median on its own.
+   */
+  async benchmarkRows(): Promise<BenchmarkRow[]> {
+    const targetById = new Map(this.state.targets.map((t) => [t.id, t]));
+    const businessById = new Map(this.state.businesses.map((b) => [b.id, b]));
+    const latest = new Map<string, BenchmarkRow>();
+
+    for (const finding of this.state.findings) {
+      if (finding.measured_value === null || finding.measured_unit === null) continue;
+      if (!FINDINGS[finding.code].benchmarkable) continue;
+
+      const target = targetById.get(finding.target_id);
+      const business = target ? businessById.get(target.business_id) : undefined;
+      if (!business?.vertical) continue;
+
+      const row: BenchmarkRow = {
+        business_id: business.id,
+        vertical: business.vertical,
+        region: business.region,
+        code: finding.code,
+        metric: finding.measured_unit,
+        value: finding.measured_value,
+        measured_at: finding.normalised_at,
+      };
+
+      const key = `${business.id}|${finding.code}|${finding.measured_unit}`;
+      const seen = latest.get(key);
+      if (!seen || seen.measured_at < row.measured_at) latest.set(key, row);
+    }
+
+    return [...latest.values()];
+  }
+
+  async replaceBenchmarks(rows: Benchmark[]): Promise<void> {
+    this.state.benchmarks = rows;
+    await this.#changed();
   }
 
   async listScans(limit = 50): Promise<Scan[]> {

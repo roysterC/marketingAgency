@@ -44,9 +44,10 @@ npm run scan -- --name "Riverside Plumbing" --postcode "SW18 4AB" --fixtures
 | Render — full report + cold-outbound one-pager | ✅ |
 | Real provider adapters | ✅ Places, DataForSEO, PageSpeed, three LLMs, site crawler |
 | Persistence + scan runner + CLI | ✅ |
+| Benchmark aggregation (A2's engine) | ✅ produces nothing until ~20 businesses, by design |
 | **Run on 10 real businesses** | ← next, needs keys |
 
-**~11,000 lines of source, ~6,000 of tests, 519 tests passing.** `npm run check` runs typecheck,
+**~11,500 lines of source, ~6,500 of tests, 539 tests passing.** `npm run check` runs typecheck,
 the taxonomy consistency check and the full suite — with no API keys and no spend, because every
 provider has a fixture implementation behind the same interface. `--fixtures` runs the whole
 pipeline the same way.
@@ -129,11 +130,12 @@ From that point the spec is explicit: **iterate on report quality, not on code.*
 npm run check
 ```
 
-Typecheck, the taxonomy consistency check, and 519 tests. No keys, no network, no spend.
+Typecheck, the taxonomy consistency check, and 539 tests. No keys, no network, no spend.
 
 ```bash
 npm run scan -- --name "Riverside Plumbing" --postcode "SW18 4AB" --fixtures
 npm run scan -- --list
+npm run benchmarks          # recompute percentiles across every scan so far
 npm run check:keys -- --live
 ```
 
