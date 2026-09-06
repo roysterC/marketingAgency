@@ -97,6 +97,22 @@ Not a blocker: collectors fail independently and a scan runs regardless. It does
 its sharpest finding, and [`docs/teardown-engine.md`](docs/teardown-engine.md) §1 and §4 record
 the consequence and what carries the conversion mechanic instead.
 
+## How a scan runs
+
+[`lib/scan/run.ts`](lib/scan/run.ts) is the pipeline: resolve → collect → normalise → analyse
+→ render, writing to a [`ScanStore`](lib/db/store.ts) as it goes. It is where rules 3, 5 and 8
+meet — captures are stored before normalisation so `renormalise()` can replay a scan against
+improved rules for free, every collect is wrapped so a dead source thins the report rather than
+ending it, and a `CostMeter` makes `scans.cost_pence` a measurement rather than an estimate.
+
+The store has two implementations behind one interface: in-memory for tests, and a JSON file
+for the CLI. **Postgres is not wired up yet** — the stack decision stands, but ten manual scans
+do not need an instance provisioned, and the interface means it drops in without the runner or
+the CLI changing. Move when scan volume or a second reader makes it worth it.
+
+The trigger is a CLI rather than the dashboard in spec §9. For ten manual scans it does the same
+job with much less to build, and A6 puts the site last for the same reason.
+
 ## Stack
 
 - **Next.js (App Router)** — dashboard, API, report rendering
@@ -137,6 +153,9 @@ npm test               # node:test via tsx
 
 npm run check:keys           # which credentials are set. No network, no spend
 npm run check:keys -- --live # one real call per provider to prove each key works
+
+npm run scan -- --name "X" --postcode "SW18 4AB" --fixtures   # whole pipeline, no keys
+npm run scan -- --list                                        # previous scans
 ```
 
 `check:keys` is separate from `check` on purpose: the test suite must keep passing with no

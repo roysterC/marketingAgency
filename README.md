@@ -26,8 +26,13 @@ resolve  →  collect  →  normalise  →  analyse  →  render
 
 ## Where this is
 
-Phase A1 is **feature-complete on fixtures**. Every stage runs end to end and every source has a
-real adapter, but nothing has been pointed at a live API or a real business yet.
+**A scan runs end to end.** One command takes a business name and postcode through resolve →
+collect → normalise → analyse → render, writes every row the schema has a table for, and
+produces a report. On fixtures today; on live providers as soon as there are keys.
+
+```bash
+npm run scan -- --name "Riverside Plumbing" --postcode "SW18 4AB" --fixtures
+```
 
 | Stage | State |
 |---|---|
@@ -38,11 +43,13 @@ real adapter, but nothing has been pointed at a live API or a real business yet.
 | Analyse — brief, LLM narrative, pre-render gate | ✅ |
 | Render — full report + cold-outbound one-pager | ✅ |
 | Real provider adapters | ✅ Places, DataForSEO, PageSpeed, three LLMs, site crawler |
+| Persistence + scan runner + CLI | ✅ |
 | **Run on 10 real businesses** | ← next, needs keys |
 
-**~10,000 lines of source, ~5,000 of tests, 480 tests passing.** `npm run check` runs typecheck,
+**~11,000 lines of source, ~6,000 of tests, 519 tests passing.** `npm run check` runs typecheck,
 the taxonomy consistency check and the full suite — with no API keys and no spend, because every
-provider has a fixture implementation behind the same interface.
+provider has a fixture implementation behind the same interface. `--fixtures` runs the whole
+pipeline the same way.
 
 ### What the engine actually says
 
@@ -116,10 +123,19 @@ that a stranger in the vertical would pay £500 for it.
 
 From that point the spec is explicit: **iterate on report quality, not on code.**
 
-## Checks
+## Commands
 
 ```bash
 npm run check
 ```
 
-Typecheck, the taxonomy consistency check, and 480 tests. No keys, no network, no spend.
+Typecheck, the taxonomy consistency check, and 519 tests. No keys, no network, no spend.
+
+```bash
+npm run scan -- --name "Riverside Plumbing" --postcode "SW18 4AB" --fixtures
+npm run scan -- --list
+npm run check:keys -- --live
+```
+
+Scans write to `.scans/` — the store, and a rendered report per scan. That directory is
+gitignored, because it holds real businesses' data.

@@ -53,6 +53,10 @@ export function createGbpCollector(provider: GbpProvider): Collector<GbpProfile>
     normalise(raw: GbpProfile | null, ctx: NormaliseContext): FindingSeed[] {
       return normaliseGbp(raw, ctx);
     },
+
+    peerStats(raws: (GbpProfile | null)[]): PeerStats {
+      return gbpPeerStats(raws.filter((p): p is GbpProfile => p !== null));
+    },
   };
 }
 

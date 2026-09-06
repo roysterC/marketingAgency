@@ -422,15 +422,22 @@ up.
 Keep it simple — solo founder, no monorepo on day one.
 
 ```
-/app          Next.js — dashboard, API routes, report rendering
+/bin          the scan CLI — the manual trigger from §9
 /lib
+  /adapters   real provider implementations, one per source
+  /analyse    the brief, the writer interface, the pre-render gate
   /collectors one module per collector
+  /db         the ScanStore interface and its implementations
+  /report     HTML rendering
+  /resolve    subject and competitor selection
+  /scan       runScan() — the pipeline
   /taxonomy   finding codes + shared types
-  /db         schema, migrations, client
-  /report     templates
-/worker       Playwright service (separate deploy)
 /docs
+/supabase     migrations
 ```
+
+`/app` and `/worker` are not built. The dashboard is A6, and the crawler turned out to need
+HTTP and an HTML parser rather than a browser — see §7.
 
 ---
 

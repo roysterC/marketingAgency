@@ -154,6 +154,10 @@ export function createAivisCollector(
     normalise(raw: AivisCapture | null, ctx: NormaliseContext): FindingSeed[] {
       return normaliseAivis(raw, ctx);
     },
+
+    peerStats(raws: (AivisCapture | null)[]): PeerStats {
+      return aivisPeerStats(raws.filter((c): c is AivisCapture => c !== null));
+    },
   };
 }
 

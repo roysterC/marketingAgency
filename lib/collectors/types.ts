@@ -115,6 +115,42 @@ export interface Collector<Raw> {
   readonly emits: readonly FindingCode[];
   collect(target: CollectTarget, ctx: CollectContext): Promise<Priced<Raw | null>>;
   normalise(raw: Raw | null, ctx: NormaliseContext): FindingSeed[];
+  /**
+   * Peer medians and bests across everything collected in this scan.
+   *
+   * Optional because not every collector compares — `sitetech` measures against Google's
+   * published thresholds, not against the competitor set. Where it exists, the runner calls
+   * it after collection and before normalisation, which is what lets a comparative finding
+   * say "0.17 a month against a competitor best of 5.92" instead of asserting neglect
+   * against nothing.
+   *
+   * The polarity lives here rather than downstream: `best` is the maximum for review
+   * velocity and the *minimum* for map-pack position, and only the collector knows which.
+   */
+  peerStats?(raws: Raw[], ctx: { now: Date }): PeerStats;
+}
+
+/**
+ * A collector with its raw type erased, so a scan can hold a list of mixed collectors.
+ *
+ * `Collector<Raw>` is invariant in `Raw` — `normalise` takes it as a parameter — so a
+ * `Collector<GbpProfile>` is not assignable to `Collector<unknown>`. Erasing is sound in
+ * practice because the only value ever passed to `normalise` is the one `collect` returned,
+ * and the runner is what guarantees that pairing.
+ */
+export interface AnyCollector {
+  readonly name: CollectorName;
+  readonly requires_auth: boolean;
+  readonly segments: readonly Segment[];
+  readonly emits: readonly FindingCode[];
+  collect(target: CollectTarget, ctx: CollectContext): Promise<Priced<unknown>>;
+  normalise(raw: unknown, ctx: NormaliseContext): FindingSeed[];
+  peerStats?(raws: unknown[], ctx: { now: Date }): PeerStats;
+}
+
+/** Erase a collector's raw type so it can sit in a scan's collector list. */
+export function erase<Raw>(collector: Collector<Raw>): AnyCollector {
+  return collector as unknown as AnyCollector;
 }
 
 /** The outcome of one fallible piece of collection. */

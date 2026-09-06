@@ -310,6 +310,69 @@ export const REPORT_CONTEXT = {
   mode: 'cold' as const,
 };
 
+/**
+ * A writer that builds a valid narrative from whatever brief it is handed.
+ *
+ * Deterministic, no model, no key. It exists to exercise the pipeline end to end —
+ * `GOOD_NARRATIVE` cannot do that, because its finding ids belong to this file rather than
+ * to the scan being run, so every claim comes back unreferenced.
+ *
+ * **It is not a report anyone would send.** It states each finding in one flat sentence and
+ * ranks nothing. What it does do is satisfy every gate in `validate.ts` — cite a real
+ * finding for every claim and recommendation, hedge anything `estimated`, and mention every
+ * critical finding — which makes it the right thing to prove the plumbing with, and a
+ * useful floor to compare a real narrative against.
+ */
+export function templateWriter(): NarrativeWriter {
+  return {
+    name: 'template-writer',
+
+    async write(brief): Promise<Priced<Narrative>> {
+      const say = (f: (typeof brief.findings)[number]): string => {
+        const measured = f.measured.text ?? (f.measured.value === null ? null : `${f.measured.value}`);
+        const detail = measured ? `: ${measured}` : '';
+        // An estimated finding is inference, and the gate rejects a flat statement of one.
+        return f.confidence === 'estimated'
+          ? `${f.title} appears to apply to ${brief.subject}${detail}.`
+          : `${f.title}${detail}.`;
+      };
+
+      const subjectFindings = brief.findings.filter((f) => f.target.role === 'subject');
+      const bySeverity = ['critical', 'high', 'medium', 'low', 'info'] as const;
+
+      const collectors = [...new Set(subjectFindings.map((f) => f.collector))];
+
+      return {
+        value: {
+          // Worst first, and every critical appears here or in a section.
+          executive_summary: subjectFindings
+            .filter((f) => f.severity === 'critical' || f.severity === 'high')
+            .slice(0, 4)
+            .map((f) => ({ text: say(f), finding_id: f.finding_id })),
+
+          sections: collectors.map((collector) => ({
+            heading: collector,
+            collector,
+            claims: subjectFindings
+              .filter((f) => f.collector === collector)
+              .sort((a, b) => bySeverity.indexOf(a.severity) - bySeverity.indexOf(b.severity))
+              .map((f) => ({ text: say(f), finding_id: f.finding_id })),
+          })),
+
+          recommendations: subjectFindings
+            .filter((f) => f.severity === 'critical' || f.severity === 'high')
+            .map((f, i) => ({
+              action: `Address: ${f.title}`,
+              finding_ids: [f.finding_id],
+              priority: i + 1,
+            })),
+        },
+        cost: { pence: 0 },
+      };
+    },
+  };
+}
+
 /** A writer that returns a prepared narrative. No key, no spend, no model. */
 export function fixtureWriter(narrative: Narrative = GOOD_NARRATIVE): NarrativeWriter & {
   briefs: () => AnalysisBrief[];

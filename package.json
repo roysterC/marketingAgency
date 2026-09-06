@@ -9,7 +9,8 @@
     "test": "node --import tsx --test \"lib/**/*.test.ts\"",
     "check:taxonomy": "node scripts/check-taxonomy.mjs",
     "check": "npm run typecheck && npm run check:taxonomy && npm run test",
-    "check:keys": "node --import tsx scripts/check-keys.mts"
+    "check:keys": "node --import tsx scripts/check-keys.mts",
+    "scan": "node --import tsx bin/scan.mts"
   },
   "devDependencies": {
     "@types/node": "^22.10.2",

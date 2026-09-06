@@ -111,6 +111,10 @@ export function createLocalRankCollector(
     normalise(raw: LocalRankCapture | null, ctx: NormaliseContext): FindingSeed[] {
       return normaliseLocalRank(raw, ctx);
     },
+
+    peerStats(raws: (LocalRankCapture | null)[]): PeerStats {
+      return localRankPeerStats(raws.filter((c): c is LocalRankCapture => c !== null));
+    },
   };
 }
 

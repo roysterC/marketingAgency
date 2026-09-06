@@ -75,6 +75,13 @@ export function createReviewsCollector(provider: ReviewsProvider): Collector<Rev
     normalise(raw: ReviewsCapture | null, ctx: NormaliseContext): FindingSeed[] {
       return normaliseReviews(raw, ctx);
     },
+
+    peerStats(raws: (ReviewsCapture | null)[], ctx: { now: Date }): PeerStats {
+      return reviewsPeerStats(
+        raws.filter((c): c is ReviewsCapture => c !== null),
+        ctx.now,
+      );
+    },
   };
 }
 

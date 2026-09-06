@@ -172,6 +172,10 @@ export function createSpeedToLeadCollector(
     normalise(raw: SpeedToLeadCapture | null, ctx: NormaliseContext): FindingSeed[] {
       return normaliseSpeedToLead(raw, ctx);
     },
+
+    peerStats(raws: (SpeedToLeadCapture | null)[]): PeerStats {
+      return speedToLeadPeerStats(raws.filter((c): c is SpeedToLeadCapture => c !== null));
+    },
   };
 }
 
