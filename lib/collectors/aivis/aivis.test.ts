@@ -251,6 +251,68 @@ describe('shares are measured over the whole prompt set', () => {
     assert.equal(competitorOnlyShare(empty), null);
     assert.equal(codes(normaliseAivis(empty, ctx())).includes('AIVIS_NOT_CITED'), false);
   });
+
+  /**
+   * The case the first live scan hit. Claude answered all three buying prompts at length
+   * and named nobody: "I can't look up live listings, so I won't invent company names."
+   * Dividing by all three answers reported 0% citation share at high severity, and the
+   * report turned that into "you are not on it. Every one of those prompts is a job that
+   * goes elsewhere." Nothing had been measured.
+   */
+  describe('a model that recommends nobody', () => {
+    const declined: AivisCapture = {
+      ...captures.p_riverside!,
+      answers: captures.p_riverside!.answers.map((a) => ({ ...a, citations: [] })),
+    };
+
+    test('measures nothing rather than zero', () => {
+      assert.ok(declined.answers.length > 0, 'the model did answer, at length');
+      assert.equal(citationShare(declined), null);
+      assert.equal(competitorOnlyShare(declined), null);
+    });
+
+    test('says nothing, because a business absent from an empty list is not a finding', () => {
+      const emitted = codes(normaliseAivis(declined, ctx()));
+      assert.equal(emitted.includes('AIVIS_NOT_CITED'), false);
+      assert.equal(emitted.includes('AIVIS_COMPETITOR_CITED'), false);
+    });
+
+    test('is not allowed to drag a competitor benchmark to zero either', () => {
+      const stats = aivisPeerStats([declined]);
+      assert.equal(stats.median[PEER_KEYS.citation_share], undefined);
+    });
+  });
+
+  describe('the denominator is stated, not implied', () => {
+    // One answer names the subject, one names only a rival, one recommends nobody.
+    const mixed: AivisCapture = {
+      ...captures.p_riverside!,
+      answers: [
+        { ...captures.p_riverside!.answers[0]!, citations: [] },
+        ...captures.p_riverside!.answers.slice(1, 3),
+      ],
+    };
+
+    test('shares are computed over answers that recommended someone', () => {
+      const responsive = mixed.answers.filter((a) => a.citations.length > 0);
+      assert.equal(responsive.length, 2);
+      const cited = responsive.filter((a) =>
+        a.citations.some((c) => c.place_id === mixed.place_id),
+      ).length;
+      assert.equal(citationShare(mixed), Math.round((cited / 2) * 1000) / 10);
+    });
+
+    test('the finding carries the denominator it used', () => {
+      const seed = normaliseAivis(mixed, ctx()).find((s) => s.code === 'AIVIS_NOT_CITED');
+      if (!seed) return; // only asserted when the share is low enough to fire
+      const evidence = seed.evidence as Record<string, unknown>;
+      assert.equal(evidence.answers_recommending_anyone, 2);
+      assert.equal(evidence.prompts_asked, mixed.answers.length);
+      // A prompt the model declined is never listed as one this business lost.
+      assert.equal((evidence.uncited_prompts as unknown[]).length <= 2, true);
+      assert.match(String(seed.measured_text), /that recommended anyone/);
+    });
+  });
 });
 
 describe('the prompt set is bought once for the scan', () => {

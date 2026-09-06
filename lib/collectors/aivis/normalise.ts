@@ -94,20 +94,46 @@ export function contradicts(field: FactField, stated: string, known: KnownFacts)
 const citationOf = (answer: PromptAnswer, placeId: string): ModelCitation | undefined =>
   answer.citations.find((c) => c.place_id === placeId);
 
-/** Share of answers naming this business, 0–100. Null when nothing was asked. */
-export function citationShare(capture: AivisCapture): number | null {
-  if (capture.answers.length === 0) return null;
-  const cited = capture.answers.filter((a) => citationOf(a, capture.place_id)).length;
-  return round((cited / capture.answers.length) * 100, 1);
+/**
+ * Answers in which the model actually recommended somebody.
+ *
+ * This is the denominator for every share below, and using it rather than "all answers" is
+ * the difference between a true finding and a libellous one.
+ *
+ * The first live scan asked Claude three buying prompts about a Birmingham roofer. It named
+ * nobody in any of them — "I can't look up live listings, so I won't invent company names".
+ * Dividing by all three answers gave 0% citation share and fired `AIVIS_NOT_CITED` at high
+ * severity, which the report rendered as "you are not on it. Every one of those prompts is
+ * a job that goes elsewhere." Not one word of that was established. No business was on the
+ * list, so the business being absent from it measures nothing, and the prospect disproves
+ * the claim with a single query.
+ *
+ * A model that recommends nobody is a fact about the model, not about the business.
+ */
+export function responsiveAnswers(capture: AivisCapture): PromptAnswer[] {
+  return capture.answers.filter((a) => a.citations.length > 0);
 }
 
-/** Share of answers naming someone else but not this business, 0–100. */
+/**
+ * Share of *responsive* answers naming this business, 0–100.
+ *
+ * Null when nothing was asked, and null when nothing was answered with a recommendation —
+ * two different kinds of "we did not measure this", both of which must stay silent rather
+ * than resolve to zero.
+ */
+export function citationShare(capture: AivisCapture): number | null {
+  const responsive = responsiveAnswers(capture);
+  if (responsive.length === 0) return null;
+  const cited = responsive.filter((a) => citationOf(a, capture.place_id)).length;
+  return round((cited / responsive.length) * 100, 1);
+}
+
+/** Share of responsive answers naming someone else but not this business, 0–100. */
 export function competitorOnlyShare(capture: AivisCapture): number | null {
-  if (capture.answers.length === 0) return null;
-  const lost = capture.answers.filter(
-    (a) => !citationOf(a, capture.place_id) && a.citations.length > 0,
-  ).length;
-  return round((lost / capture.answers.length) * 100, 1);
+  const responsive = responsiveAnswers(capture);
+  if (responsive.length === 0) return null;
+  const lost = responsive.filter((a) => !citationOf(a, capture.place_id)).length;
+  return round((lost / responsive.length) * 100, 1);
 }
 
 interface WrongClaim {
@@ -150,10 +176,14 @@ export function normaliseAivis(
   if (!capture) return [];
 
   const seeds: FindingSeed[] = [];
+  const responsive = responsiveAnswers(capture);
   const asked = {
     prompts_asked: capture.answers.length,
     models: [...new Set(capture.answers.map((a) => a.model))],
     prompts_failed: capture.failed_prompts.length,
+    // The denominator, stated. A share is meaningless without it, and this is the number
+    // that separates "the models recommend your rivals" from "the models recommend nobody".
+    answers_recommending_anyone: responsive.length,
   };
 
   // --- a model stating something wrong -------------------------------------
@@ -181,7 +211,11 @@ export function normaliseAivis(
     seeds.push({
       code: 'AIVIS_NOT_CITED',
       measured_value: share,
-      measured_text: `named in ${share}% of answers`,
+      // Says what it is a share of. "0% of answers" invited the reader to assume all of
+      // them; only answers that recommended somebody were ever eligible.
+      measured_text:
+        `named in ${share}% of the ${responsive.length} ` +
+        `${responsive.length === 1 ? 'answer' : 'answers'} that recommended anyone`,
       benchmark_value: peerBest(ctx, PEER_KEYS.citation_share),
       benchmark_source: peerMedian(ctx, PEER_KEYS.citation_share) === null ? 'absolute' : 'competitor_best',
       evidence: {
@@ -190,8 +224,10 @@ export function normaliseAivis(
         threshold_percent: MIN_CITATION_SHARE_PERCENT,
         competitor_median: peerMedian(ctx, PEER_KEYS.citation_share),
         competitor_best: peerBest(ctx, PEER_KEYS.citation_share),
-        uncited_prompts: capture.answers
-          .filter((a) => !a.citations.some((c) => c.place_id === capture.place_id))
+        // Only answers that named someone. A prompt the model declined to answer with any
+        // recommendation is not a prompt this business lost.
+        uncited_prompts: responsive
+          .filter((a) => !citationOf(a, capture.place_id))
           .slice(0, MAX_QUOTED)
           .map((a) => ({ prompt: a.prompt, model: a.model })),
       },
