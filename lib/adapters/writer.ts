@@ -28,23 +28,23 @@ import type { AnalysisBrief } from '../analyse/brief';
 import { COLLECTORS } from '../taxonomy/enums';
 import type { Narrative } from '../types/index';
 import { required, type Env } from './config';
-import { HAIKU, contextWindowOf, thinkingFor } from './models';
+import { SONNET, contextWindowOf, thinkingFor } from './models';
 
 /**
- * Haiku 4.5, for cost. Two things to know before leaving it here.
+ * Sonnet 5 — the deliberate middle of the three tiers.
  *
- * The saving is real but small in absolute terms — roughly 18p a scan against 60p on
- * Opus — because the writer runs once. Extraction (`aivis.ts`) is where model choice
- * actually moves the bill, since that one runs ~48 times a scan.
+ * This is the only call in the engine whose output a client reads, which makes it the
+ * one place paying more is defensible. Sonnet keeps adaptive thinking and the 1M context
+ * window — Haiku's 200K is uncomfortably close to a ~150k-token brief — at 60% under Opus.
  *
- * And this is the only call in the engine whose output a client reads. If report prose
- * is the thing being judged, `SONNET` is the better trade: 1M context and adaptive
- * thinking, still 60% under Opus. Swap the constant — `thinkingFor()` adjusts.
+ * The writer runs once a scan, so the whole spread between tiers is pennies: 18p on
+ * Haiku, 36p here, 60p on Opus. Extraction (`aivis.ts`) is where model choice actually
+ * moves the bill, at ~48 calls a scan, and that one is on Haiku.
  */
-export const DEFAULT_WRITER_MODEL = HAIKU;
+export const DEFAULT_WRITER_MODEL = SONNET;
 
-/** ~£0.18 for a 150k-in / 15k-out analysis on Haiku ($1/$5 per MTok). */
-const DEFAULT_COST: Cost = { pence: 18 };
+/** ~£0.36 for a 150k-in / 15k-out analysis on Sonnet ($2/$10 per MTok). */
+const DEFAULT_COST: Cost = { pence: 36 };
 
 const ClaimSchema = z.object({
   text: z.string(),

@@ -21,7 +21,7 @@ This is a settled decision. See `../CLAUDE.md`.
 | Site crawl | Own fetch crawler | Infra only | Respect `robots.txt`. A browser is only needed for screenshots and client-rendered sites |
 | Tech stack detection | Own — inspect page | Free | Clean |
 | AI visibility | Anthropic / OpenAI / Perplexity APIs | ~£0.30/scan | Clean |
-| LLM analysis | Anthropic API | ~£0.18/scan | Haiku 4.5 — see lib/adapters/models.ts |
+| LLM analysis | Anthropic API | ~£0.36/scan | Sonnet 5 writer, Haiku extraction — lib/adapters/models.ts |
 | Ad library (DTC) | Reseller | ~£1/scan | ⚠️ See below |
 | Directory citations | Mixed | ~£0.10/scan | Check per-directory terms |
 
@@ -43,7 +43,7 @@ strongest local finding the engine produces — reachable in cold mode. Not a cl
 
 ## Cost per cold SMB scan
 
-1 subject + 5 competitors: **~£1.08 – 2.23**. DTC adds ~£1. Budget **£2–5**.
+1 subject + 5 competitors: **~£1.26 – 2.41**. DTC adds ~£1. Budget **£2–5**.
 
 Track actuals in `collector_runs.cost_pence` from day one — the cold-outbound economics depend
 on this number staying low, and it will drift as collectors get added.
