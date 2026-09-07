@@ -34,8 +34,34 @@ export const WEIGHTS = {
   proximity: 0.2,
 } as const;
 
-/** Position depth used to normalise rank. Beyond this, position stops discriminating. */
-const POSITION_REFERENCE = 10;
+/** The actual Google map pack. Three slots — anything past this is the wider local list. */
+export const MAP_PACK_SIZE = 3;
+
+/**
+ * How deep local results are worth scoring before rank stops meaning anything.
+ *
+ * The first live scan is what set this. A linear decay over a reference of 10 scored every
+ * competitor past position 10 as identically zero, and real data sits well past there —
+ * that scan returned medians of 4, 23, 47 and 56. Rank value decays sharply rather than
+ * linearly, so a log curve keeps the top three dominant while still telling position 20
+ * from position 60 instead of flattening both to nothing.
+ */
+const POSITION_HORIZON = 100;
+
+/**
+ * Median, not mean.
+ *
+ * Same reasoning as `localrank`: one deep result among strong ones drags an average far
+ * enough to misrepresent the business. A local copy rather than the one in
+ * `collectors/types` because collectors already import from resolve, and reaching back
+ * the other way would close a cycle.
+ */
+function medianOf(values: number[]): number | null {
+  if (values.length === 0) return null;
+  const sorted = [...values].sort((a, b) => a - b);
+  const mid = Math.floor(sorted.length / 2);
+  return sorted.length % 2 === 1 ? sorted[mid]! : (sorted[mid - 1]! + sorted[mid]!) / 2;
+}
 
 /**
  * Directories and aggregators. These dominate local map packs and are never competitors —
@@ -90,12 +116,14 @@ function scoreOf(
   const matched = candidate.appearances.length;
   const keywordOverlap = keywordsTotal > 0 ? clamp01(matched / keywordsTotal) : 0;
 
-  const avgPosition =
-    matched > 0
-      ? candidate.appearances.reduce((sum, a) => sum + a.position, 0) / matched
-      : POSITION_REFERENCE;
+  const positions = candidate.appearances.map((a) => Math.max(1, a.position));
+  const medianPosition = medianOf(positions) ?? POSITION_HORIZON;
+  const bestPosition = positions.length > 0 ? Math.min(...positions) : POSITION_HORIZON;
+  const topThree = positions.filter((p) => p <= MAP_PACK_SIZE).length;
+
+  // Log decay: position 1 scores 1.0, 3 scores 0.76, 10 scores 0.50, 50 scores 0.15.
   const positionStrength = clamp01(
-    1 - (avgPosition - 1) / (POSITION_REFERENCE - 1),
+    1 - Math.log(medianPosition) / Math.log(POSITION_HORIZON),
   );
 
   const dKm = distanceKm(subject, candidate);
@@ -114,7 +142,9 @@ function scoreOf(
       proximity,
       keywords_matched: matched,
       keywords_total: keywordsTotal,
-      average_position: avgPosition,
+      median_position: medianPosition,
+      best_position: bestPosition,
+      top_three: topThree,
       distance_km: dKm,
     },
   };
@@ -133,10 +163,14 @@ export function buildRationale(
 ): string {
   const parts: string[] = [];
 
+  // "Map pack" means the three-result block, so it is simply false above position 3 — and
+  // the first live scan produced medians of 23, 47 and 56 under that wording. A prospect
+  // who spots "map pack, average position 52" stops trusting the rest of the document.
   parts.push(
-    `Ranks in the map pack for ${breakdown.keywords_matched} of your ` +
+    `Appears in local results for ${breakdown.keywords_matched} of your ` +
       `${breakdown.keywords_total} money keyword${breakdown.keywords_total === 1 ? '' : 's'}` +
-      ` (average position ${breakdown.average_position.toFixed(1)})`,
+      ` — ${breakdown.top_three === 0 ? 'none' : breakdown.top_three} in the top ` +
+      `${MAP_PACK_SIZE}, median position ${breakdown.median_position.toFixed(0)}`,
   );
 
   const miles = kmToMiles(breakdown.distance_km);

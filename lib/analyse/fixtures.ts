@@ -181,7 +181,7 @@ export const TARGETS = [
   {
     id: COMPETITOR_TARGET,
     role: 'competitor' as const,
-    selection_reason: 'Ranks in the map pack for 5 of 5 money keywords, 0.8 miles away',
+    selection_reason: 'Appears in local results for 5 of 5 money keywords — 4 in the top 3, median position 2, 0.8 miles away',
     name: 'Wandsworth Plumbers Ltd',
   },
 ];

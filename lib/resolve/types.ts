@@ -58,7 +58,11 @@ export interface ScoreBreakdown {
   proximity: number;
   keywords_matched: number;
   keywords_total: number;
-  average_position: number;
+  /** Median, not mean — one deep result should not drag the summary. */
+  median_position: number;
+  best_position: number;
+  /** How many money keywords this business holds an actual map-pack slot for. */
+  top_three: number;
   distance_km: number;
 }
 

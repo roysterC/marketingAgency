@@ -50,7 +50,7 @@ function usage(): never {
 
   ${dim('--fixtures')}   run against fixtures. No keys, no network, no spend
   ${dim('--keywords')}   comma-separated money keywords. Required for a live scan:
-                competitors are chosen from the map pack for these terms
+                competitors are chosen from the local results for these terms
   ${dim('--out')}        where to write reports (default .scans)
   ${dim('--list')}       list previous scans and stop
 `);
@@ -151,7 +151,7 @@ async function wire(): Promise<{
     console.error(
       red('\n  --keywords is required for a live scan.') +
         dim(
-          '\n  Competitors are chosen from the map pack for these terms, so without them the' +
+          '\n  Competitors are chosen from the local results for these terms, so without them the' +
             '\n  scan resolves the subject and finds nobody to compare it against.' +
             '\n\n  --keywords "emergency roofer birmingham,roof repair birmingham"\n',
         ),

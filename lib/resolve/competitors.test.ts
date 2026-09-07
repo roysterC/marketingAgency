@@ -115,9 +115,57 @@ describe('selectCompetitors', () => {
     const { competitors } = selectCompetitors(SUBJECT, world, 5);
     const top = competitors[0]!;
     assert.match(top.rationale, /5 of your 5 money keywords/);
-    assert.match(top.rationale, /average position 1\.4/);
+    assert.match(top.rationale, /5 in the top 3/);
+    assert.match(top.rationale, /median position 1/);
     assert.match(top.rationale, /miles away|same location/);
     assert.match(top.rationale, /same primary category \(Plumber\)/);
+  });
+
+  test('never claims the map pack for a business outside it', () => {
+    // "Map pack" is the three-result block, so it is false above position 3. The first
+    // live scan wrote "map pack ... average position 52", which is the kind of line that
+    // makes a prospect distrust everything else in the document.
+    const deep = candidate({ place_id: 'deep' }, [['k1', 48], ['k2', 61], ['k3', 55]]);
+    const { competitors } = selectCompetitors(SUBJECT, [deep], 5);
+
+    assert.doesNotMatch(competitors[0]!.rationale, /map pack/i);
+    assert.match(competitors[0]!.rationale, /local results/);
+    assert.match(competitors[0]!.rationale, /none in the top 3/);
+    assert.match(competitors[0]!.rationale, /median position 55/);
+  });
+
+  test('a single deep result does not drag the summary', () => {
+    // Median, not mean: [2,3,90] averages to 31.7 but reads as 3.
+    const skewed = candidate({ place_id: 'skew' }, [['k1', 2], ['k2', 3], ['k3', 90]]);
+    const { competitors } = selectCompetitors(SUBJECT, [skewed], 5);
+    assert.equal(competitors[0]!.breakdown.median_position, 3);
+    assert.equal(competitors[0]!.breakdown.best_position, 2);
+  });
+
+  test('position keeps discriminating past the top ten', () => {
+    // The bug this replaced: a linear decay over a reference of 10 scored every
+    // competitor past position 10 as identically zero, and real local data sits there.
+    const mid = candidate({ place_id: 'mid' }, [['k1', 20]]);
+    const far = candidate({ place_id: 'far' }, [['k1', 60]]);
+    const { competitors } = selectCompetitors(SUBJECT, [mid, far], 1);
+
+    const strength = (id: string) =>
+      competitors.find((c) => c.place.place_id === id)!.breakdown.position_strength;
+
+    assert.ok(strength('mid') > strength('far'), 'position 20 must beat position 60');
+    assert.ok(strength('far') > 0, 'position 60 is weak, not worthless');
+  });
+
+  test('the top three still dominate', () => {
+    const first = candidate({ place_id: 'first' }, [['k1', 1]]);
+    const tenth = candidate({ place_id: 'tenth' }, [['k1', 10]]);
+    const { competitors } = selectCompetitors(SUBJECT, [first, tenth], 1);
+
+    const strength = (id: string) =>
+      competitors.find((c) => c.place.place_id === id)!.breakdown.position_strength;
+
+    assert.equal(strength('first'), 1);
+    assert.ok(strength('tenth') < 0.6, 'position 10 is worth about half of position 1');
   });
 
   test('warns on a thin set instead of failing', () => {
