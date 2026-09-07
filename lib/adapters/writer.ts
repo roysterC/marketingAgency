@@ -115,7 +115,20 @@ export interface WriterConfig {
   cost?: Cost;
   /** Raise for a longer report, lower for a cheaper draft. */
   maxTokens?: number;
+  /**
+   * How hard the model thinks before writing.
+   *
+   * The billing export made this the writer's dominant cost: a successful run billed
+   * ~44,000 output tokens against a narrative of maybe 2-3k, so roughly 90% of what was
+   * paid for was thinking, at output prices. Effort is the dial on that.
+   */
+  effort?: Effort;
 }
+
+/** Thinking depth. `high` is the API default. */
+export type Effort = 'low' | 'medium' | 'high' | 'xhigh' | 'max';
+
+export const DEFAULT_EFFORT: Effort = 'high';
 
 /**
  * A ceiling, not a spend — you are billed for what the model generates, not for the cap.
@@ -137,6 +150,7 @@ export function createNarrativeWriter(config: WriterConfig = {}): NarrativeWrite
   const model = config.model ?? DEFAULT_WRITER_MODEL;
   const cost = config.cost ?? DEFAULT_COST;
   const maxTokens = config.maxTokens ?? DEFAULT_MAX_TOKENS;
+  const effort = config.effort ?? DEFAULT_EFFORT;
 
   return {
     name: `claude-writer/${model}`,
@@ -171,7 +185,7 @@ export function createNarrativeWriter(config: WriterConfig = {}): NarrativeWrite
         // Shape depends on the model — adaptive is rejected by Haiku, budget_tokens by Opus.
         thinking: thinkingFor(model),
         messages: [{ role: 'user', content: rendered }],
-        output_config: { format: zodOutputFormat(NarrativeSchema) },
+        output_config: { effort, format: zodOutputFormat(NarrativeSchema) },
       });
 
       const response = await stream.finalMessage();

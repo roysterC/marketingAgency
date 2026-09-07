@@ -19,6 +19,7 @@
  */
 
 import type { Collector as CollectorName } from '../taxonomy/enums';
+import type { Effort } from '../adapters/writer';
 
 export const PROFILE_NAMES = ['hook', 'full'] as const;
 export type ProfileName = (typeof PROFILE_NAMES)[number];
@@ -33,6 +34,20 @@ export interface ScanProfile {
   readonly enrichLimit: number;
   /** Which report variants to render. */
   readonly variants: readonly ('full' | 'onepager')[];
+  /**
+   * How hard the writer thinks.
+   *
+   * Measured, not assumed. Re-running the writer over one scan's 42 findings at `medium`
+   * produced sentences that were, if anything, better written — and chose worse things to
+   * say. It dropped "a competitor 0.3 miles away outranks you on all five keywords" from
+   * the executive summary in favour of an `estimated` finding about thin content, and
+   * padded the sections from 24 claims to 37 by walking through each competitor in turn.
+   *
+   * The cost is in selection, so it scales with how much there is to select from. A full
+   * scan has 42 findings to prioritise and needs the judgement. A hook scan has about
+   * five, where there is nothing to get wrong.
+   */
+  readonly effort: Effort;
   readonly description: string;
 }
 
@@ -46,6 +61,7 @@ export const PROFILES: Record<ProfileName, ScanProfile> = {
     maxCompetitors: 3,
     enrichLimit: 6,
     variants: ['onepager'],
+    effort: 'medium',
     description: 'Cold outbound. The finding that gets a reply, and nothing else.',
   },
   full: {
@@ -54,6 +70,7 @@ export const PROFILES: Record<ProfileName, ScanProfile> = {
     maxCompetitors: 6,
     enrichLimit: 12,
     variants: ['full', 'onepager'],
+    effort: 'high',
     description: 'The paid audit, and the live demo. Every collector.',
   },
 };

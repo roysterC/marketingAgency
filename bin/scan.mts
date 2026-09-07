@@ -310,7 +310,7 @@ async function wire(): Promise<{
         .filter((name) => runsCollector(profile, name))
         .flatMap((name) => (build[name] ? [build[name]!()] : []));
     },
-    writer: createNarrativeWriter(writerConfigFromEnv()),
+    writer: createNarrativeWriter({ ...writerConfigFromEnv(), effort: profile.effort }),
     keywords,
   };
 }

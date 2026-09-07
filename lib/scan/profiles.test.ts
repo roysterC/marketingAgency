@@ -49,3 +49,16 @@ describe('scan profiles', () => {
     assert.throws(() => profileByName('cheap'), /hook, full/);
   });
 });
+
+describe('writer effort', () => {
+  test('full thinks hard, because it has 42 findings to prioritise', () => {
+    assert.equal(PROFILES.full.effort, 'high');
+  });
+
+  test('hook does not, because it has about five', () => {
+    // Measured on a real scan: at medium the writer dropped a named-competitor comparison
+    // from the executive summary in favour of an estimated finding, and padded 24 claims
+    // into 37. That failure mode needs a large finding set to happen at all.
+    assert.equal(PROFILES.hook.effort, 'medium');
+  });
+});

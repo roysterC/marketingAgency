@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "Research & Teardown Engine \u2014 Phase A1",
+  "description": "Research & Teardown Engine — Phase A1",
   "scripts": {
     "typecheck": "tsc --noEmit",
     "test": "node --import tsx --test \"lib/**/*.test.ts\"",
@@ -12,7 +12,8 @@
     "check:keys": "node --import tsx scripts/check-keys.mts",
     "scan": "node --import tsx bin/scan.mts",
     "benchmarks": "node --import tsx bin/benchmarks.mts",
-    "visibility": "node --import tsx bin/visibility.mts"
+    "visibility": "node --import tsx bin/visibility.mts",
+    "reanalyse": "node --import tsx bin/reanalyse.mts"
   },
   "devDependencies": {
     "@types/node": "^22.10.2",
