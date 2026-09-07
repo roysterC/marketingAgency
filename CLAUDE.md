@@ -66,6 +66,14 @@ These came out of the design and are load-bearing. Breaking them breaks the prod
    [`lib/adapters/`](lib/adapters/) and each takes an injectable `fetch` or client, so they are
    tested without a network call. Credentials are read in one place, `lib/adapters/config.ts`,
    and checked against [`.env.example`](.env.example) by a test.
+
+   **Cost means measured, including the LLM calls.** They were the exception for a while:
+   three hardcoded constants calibrated for Opus, which meant moving the writer to Sonnet and
+   extraction to Haiku cut the real bill ~60% and changed the reported figure by nothing —
+   two consecutive scans both reported £1.53. Anthropic adapters now price
+   `response.usage` through `priceUsage()` in [`lib/adapters/models.ts`](lib/adapters/models.ts).
+   Prices are fractional pence and rounded once, at persistence: an extraction call is ~0.06p,
+   and rounding each of 48 of them reports either nothing or five times the truth.
 9. **Shortlist on free signals before paying to enrich.** Map packs return more places than are
    worth a paid details lookup. Rank on data already bought, then enrich the top slice
    (`ENRICH_LIMIT`). This is what keeps a scan inside its £5 budget.

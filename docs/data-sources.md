@@ -21,7 +21,7 @@ This is a settled decision. See `../CLAUDE.md`.
 | Site crawl | Own fetch crawler | Infra only | Respect `robots.txt`. A browser is only needed for screenshots and client-rendered sites |
 | Tech stack detection | Own — inspect page | Free | Clean |
 | AI visibility | Anthropic / OpenAI / Perplexity APIs | ~£0.30/scan | Clean |
-| LLM analysis | Anthropic API | ~£0.36/scan | Sonnet 5 writer, Haiku extraction — lib/adapters/models.ts |
+| LLM analysis | Anthropic API | ~£0.26/scan | Measured per call from response.usage, not estimated |
 | Ad library (DTC) | Reseller | ~£1/scan | ⚠️ See below |
 | Directory citations | Mixed | ~£0.10/scan | Check per-directory terms |
 

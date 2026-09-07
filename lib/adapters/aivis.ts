@@ -20,7 +20,7 @@ import Anthropic from '@anthropic-ai/sdk';
 import { zodOutputFormat } from '@anthropic-ai/sdk/helpers/zod';
 import { z } from 'zod';
 
-import type { Cost, Priced } from '../resolve/providers';
+import { FREE, type Cost, type Priced } from '../resolve/providers';
 import type {
   AivisProvider,
   EntityCheck,
@@ -29,7 +29,7 @@ import type {
 } from '../collectors/aivis/types';
 import { optional, required, type Env } from './config';
 import { requestJson, type RetryPolicy } from './http';
-import { HAIKU, SONNET, thinkingFor } from './models';
+import { HAIKU, SONNET, priceUsage, thinkingFor } from './models';
 
 /**
  * The model the extraction pass runs on.
@@ -62,8 +62,7 @@ export const DEFAULT_CLAUDE_MODEL = SONNET;
 
 /** Roughly 2p an answer is the £0.30 AI-visibility line across 8 prompts x 3 models. */
 const DEFAULT_ANSWER_COST: Cost = { pence: 2 };
-/** Extraction on Haiku: a short answer in, a small schema out. */
-const DEFAULT_EXTRACTION_COST: Cost = { pence: 1 };
+/** Non-Anthropic sources have no usage to price, so GPT and Perplexity keep an estimate. */
 
 /** One model, answering a question the way a customer would ask it. */
 export interface AnswerSource {
@@ -154,7 +153,8 @@ export interface ClaudeSourceConfig {
 export function claudeSource(config: ClaudeSourceConfig = {}): AnswerSource {
   const client = config.client ?? new Anthropic(config.apiKey ? { apiKey: config.apiKey } : {});
   const model = config.model ?? DEFAULT_CLAUDE_MODEL;
-  const cost = config.cost ?? DEFAULT_ANSWER_COST;
+  // Override only for fixtures; a live call prices its own usage.
+  const cost = config.cost;
 
   return {
     model: 'claude',
@@ -171,7 +171,7 @@ export function claudeSource(config: ClaudeSourceConfig = {}): AnswerSource {
         .map((block) => block.text)
         .join('\n');
 
-      return { value: text, cost };
+      return { value: text, cost: cost ?? priceUsage(model, response.usage) };
     },
   };
 }
@@ -253,11 +253,12 @@ export interface ExtractorConfig {
 export function claudeExtractor(config: ExtractorConfig = {}): Extractor {
   const client = config.client ?? new Anthropic(config.apiKey ? { apiKey: config.apiKey } : {});
   const model = config.model ?? DEFAULT_EXTRACTION_MODEL;
-  const cost = config.cost ?? DEFAULT_EXTRACTION_COST;
+  const cost = config.cost;
 
   return {
     async extract(answer, roster): Promise<Priced<ModelCitation[]>> {
-      if (answer.trim() === '') return { value: [], cost };
+      // Nothing sent, nothing billed.
+      if (answer.trim() === '') return { value: [], cost: cost ?? FREE };
 
       const response = await client.messages.parse({
         model,
@@ -267,8 +268,9 @@ export function claudeExtractor(config: ExtractorConfig = {}): Extractor {
         output_config: { format: zodOutputFormat(ExtractionSchema) },
       });
 
+      const priced = cost ?? priceUsage(model, response.usage);
       const parsed = response.parsed_output;
-      if (!parsed) return { value: [], cost };
+      if (!parsed) return { value: [], cost: priced };
 
       const citations: ModelCitation[] = parsed.citations.map((c) => ({
         name: c.name,
@@ -277,7 +279,7 @@ export function claudeExtractor(config: ExtractorConfig = {}): Extractor {
         claims: c.claims.map((claim) => ({ field: claim.field, stated: claim.stated })),
       }));
 
-      return { value: citations, cost };
+      return { value: citations, cost: priced };
     },
 
     async recognises(answer, businessName): Promise<Priced<boolean>> {
@@ -291,7 +293,10 @@ export function claudeExtractor(config: ExtractorConfig = {}): Extractor {
         output_config: { format: zodOutputFormat(EntitySchema) },
       });
 
-      return { value: response.parsed_output?.recognised ?? false, cost };
+      return {
+        value: response.parsed_output?.recognised ?? false,
+        cost: cost ?? priceUsage(model, response.usage),
+      };
     },
   };
 }

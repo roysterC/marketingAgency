@@ -236,7 +236,10 @@ export async function runScan(input: ScanInput, deps: ScanDeps): Promise<ScanRes
         collector: collector.name,
         status: outcome.error ? 'failed' : 'ok',
         requires_auth: collector.requires_auth,
-        cost_pence: outcome.cost.pence,
+        // Fractional in memory, integer in the column. LLM calls price in fractions of a
+        // penny, so rounding is deferred to here rather than done per call — round 48
+        // extraction calls individually and a real cost reports as either nothing or 5x.
+        cost_pence: Math.round(outcome.cost.pence),
         duration_ms: Date.now() - startedAt,
         error: outcome.error,
       });
@@ -337,7 +340,7 @@ export async function runScan(input: ScanInput, deps: ScanDeps): Promise<ScanRes
   const status = violations.length === 0 ? 'complete' : 'failed';
   await store.updateScan(scan.id, {
     status,
-    cost_pence: meter.pence,
+    cost_pence: Math.round(meter.pence),
     error: violations.length === 0 ? null : violations.join('; '),
     completed: true,
   });

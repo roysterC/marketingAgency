@@ -28,23 +28,23 @@ import type { AnalysisBrief } from '../analyse/brief';
 import { COLLECTORS } from '../taxonomy/enums';
 import type { Narrative } from '../types/index';
 import { required, type Env } from './config';
-import { SONNET, contextWindowOf, thinkingFor } from './models';
+import { SONNET, contextWindowOf, priceUsage, thinkingFor } from './models';
 
 /**
  * Sonnet 5 — the deliberate middle of the three tiers.
  *
- * This is the only call in the engine whose output a client reads, which makes it the
- * one place paying more is defensible. Sonnet keeps adaptive thinking and the 1M context
- * window — Haiku's 200K is uncomfortably close to a ~150k-token brief — at 60% under Opus.
+ * This is the only call in the engine whose output a client reads, which makes it the one
+ * place paying more is defensible.
  *
- * The writer runs once a scan, so the whole spread between tiers is pennies: 18p on
- * Haiku, 36p here, 60p on Opus. Extraction (`aivis.ts`) is where model choice actually
- * moves the bill, at ~48 calls a scan, and that one is on Haiku.
+ * The context argument I first gave for it was wrong and the billing data killed it: the
+ * brief measures ~14,300 tokens, not the ~150k I assumed, so it fits Haiku's 200K window
+ * many times over. What actually separates the tiers here is judgement — measured in
+ * `lib/scan/profiles.ts`, where a cheaper writer chose worse things to say.
+ *
+ * Cost is now measured per call rather than assumed, so this no longer carries an
+ * estimate that quietly goes stale.
  */
 export const DEFAULT_WRITER_MODEL = SONNET;
-
-/** ~£0.36 for a 150k-in / 15k-out analysis on Sonnet ($2/$10 per MTok). */
-const DEFAULT_COST: Cost = { pence: 36 };
 
 const ClaimSchema = z.object({
   text: z.string(),
@@ -148,7 +148,8 @@ export function renderBrief(brief: AnalysisBrief): string {
 export function createNarrativeWriter(config: WriterConfig = {}): NarrativeWriter {
   const client = config.client ?? new Anthropic(config.apiKey ? { apiKey: config.apiKey } : {});
   const model = config.model ?? DEFAULT_WRITER_MODEL;
-  const cost = config.cost ?? DEFAULT_COST;
+  // Override only for tests and fixtures; a live call prices its own usage.
+  const cost = config.cost;
   const maxTokens = config.maxTokens ?? DEFAULT_MAX_TOKENS;
   const effort = config.effort ?? DEFAULT_EFFORT;
 
@@ -158,9 +159,10 @@ export function createNarrativeWriter(config: WriterConfig = {}): NarrativeWrite
     async write(brief): Promise<Priced<Narrative>> {
       const rendered = renderBrief(brief);
 
-      // The brief runs ~150k tokens on a full scan and Haiku's window is 200K, against
-      // 1M on Opus and Sonnet. Close enough that a findings-heavy scan could cross it, so
-      // say which model and how big rather than surfacing a raw 400 halfway through.
+      // Measured at ~14,300 tokens on a 42-finding scan, so this has a lot of headroom on
+      // every current model and will not fire in practice. Kept because it is keyed off
+      // the model rather than hardcoded, so it comes back into play if the brief grows or
+      // a smaller-context model is chosen — and a named limit beats a raw 400 mid-scan.
       const estimatedTokens = Math.ceil(rendered.length / 4);
       const window = contextWindowOf(model);
       if (estimatedTokens > window * 0.9) {
@@ -202,8 +204,12 @@ export function createNarrativeWriter(config: WriterConfig = {}): NarrativeWrite
         .map((block) => block.text)
         .join('');
 
+      // Measured, not assumed. This call is ~90% thinking tokens billed at output rates,
+      // and its cost swings with effort and finding count — a constant could not track it.
+      const measured = cost ?? priceUsage(model, response.usage);
+
       try {
-        return { value: NarrativeSchema.parse(JSON.parse(text)) as Narrative, cost };
+        return { value: NarrativeSchema.parse(JSON.parse(text)) as Narrative, cost: measured };
       } catch (cause) {
         // Not recoverable here: an unparsed response has no claims to validate, and
         // guessing at one would be the exact failure the whole stage exists to prevent.
