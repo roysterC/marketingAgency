@@ -117,6 +117,16 @@ export interface WriterConfig {
   maxTokens?: number;
 }
 
+/**
+ * A ceiling, not a spend — you are billed for what the model generates, not for the cap.
+ *
+ * Adaptive thinking counts against this, so the budget is shared between deciding what
+ * matters and writing it down. The first live scan produced 44 findings and blew a 16000
+ * cap: the think ran long, the narrative had nowhere to go, and the response came back
+ * truncated and unparsable. Since headroom is free, there is no reason to sail close.
+ */
+export const DEFAULT_MAX_TOKENS = 48_000;
+
 /** The brief, as the model sees it. JSON because it is structure, not prose. */
 export function renderBrief(brief: AnalysisBrief): string {
   return JSON.stringify(brief, null, 2);
@@ -126,7 +136,7 @@ export function createNarrativeWriter(config: WriterConfig = {}): NarrativeWrite
   const client = config.client ?? new Anthropic(config.apiKey ? { apiKey: config.apiKey } : {});
   const model = config.model ?? DEFAULT_WRITER_MODEL;
   const cost = config.cost ?? DEFAULT_COST;
-  const maxTokens = config.maxTokens ?? 16000;
+  const maxTokens = config.maxTokens ?? DEFAULT_MAX_TOKENS;
 
   return {
     name: `claude-writer/${model}`,
@@ -147,7 +157,13 @@ export function createNarrativeWriter(config: WriterConfig = {}): NarrativeWrite
         );
       }
 
-      const response = await client.messages.parse({
+      // Streamed rather than `messages.parse`, for a reason the first live scan found:
+      // adaptive thinking shares max_tokens with the narrative, and the headroom that
+      // needs puts the request past the SDK's non-streaming ceiling, which refuses
+      // outright ("Streaming is required for operations that may take longer than 10
+      // minutes"). The schema still constrains the output server-side — what moves
+      // client-side is only the parse `parsed_output` was doing for us.
+      const stream = client.messages.stream({
         model,
         max_tokens: maxTokens,
         system: WRITER_SYSTEM,
@@ -158,16 +174,30 @@ export function createNarrativeWriter(config: WriterConfig = {}): NarrativeWrite
         output_config: { format: zodOutputFormat(NarrativeSchema) },
       });
 
-      const parsed = response.parsed_output;
-      if (!parsed) {
-        // Not recoverable here: an unparsed response has no claims to validate, and
-        // guessing at one would be the exact failure the whole stage exists to prevent.
+      const response = await stream.finalMessage();
+
+      if (response.stop_reason === 'max_tokens') {
         throw new Error(
-          `The writer returned no parsable narrative (stop_reason: ${response.stop_reason}).`,
+          `The writer was truncated at ${maxTokens} tokens, which adaptive thinking shares ` +
+            `with the narrative. Raise maxTokens — it is a ceiling, not a spend.`,
         );
       }
 
-      return { value: parsed as Narrative, cost };
+      const text = response.content
+        .filter((block): block is Anthropic.TextBlock => block.type === 'text')
+        .map((block) => block.text)
+        .join('');
+
+      try {
+        return { value: NarrativeSchema.parse(JSON.parse(text)) as Narrative, cost };
+      } catch (cause) {
+        // Not recoverable here: an unparsed response has no claims to validate, and
+        // guessing at one would be the exact failure the whole stage exists to prevent.
+        throw new Error(
+          `The writer returned no parsable narrative (stop_reason: ` +
+            `${response.stop_reason}): ${(cause as Error).message}`,
+        );
+      }
     },
   };
 }
