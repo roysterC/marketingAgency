@@ -58,10 +58,11 @@ describe('model choices', () => {
     assert.doesNotThrow(() => thinkingFor(DEFAULT_WRITER_MODEL));
   });
 
-  test('the prompt-set model is NOT downgraded for cost', () => {
-    // aivis measures what a customer asking Claude actually gets. Making this cheaper
-    // would measure something no customer sees, and would break A3's time series by
-    // making any movement attributable to the swap.
-    assert.equal(DEFAULT_CLAUDE_MODEL, OPUS);
+  test('the prompt-set model tracks what a customer actually gets', () => {
+    // aivis measures the model, it does not use it, so this is chosen for
+    // representativeness rather than cost. Changing it is a break in A3's time series —
+    // snapshots either side of a swap measure the swap as much as anything else.
+    assert.equal(DEFAULT_CLAUDE_MODEL, SONNET);
+    assert.notEqual(DEFAULT_CLAUDE_MODEL, HAIKU, 'never the cheap tier — nobody asks Haiku');
   });
 });

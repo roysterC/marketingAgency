@@ -29,7 +29,7 @@ import type {
 } from '../collectors/aivis/types';
 import { optional, required, type Env } from './config';
 import { requestJson, type RetryPolicy } from './http';
-import { HAIKU, OPUS, thinkingFor } from './models';
+import { HAIKU, SONNET, thinkingFor } from './models';
 
 /**
  * The model the extraction pass runs on.
@@ -48,17 +48,17 @@ export const DEFAULT_EXTRACTION_MODEL = HAIKU;
 /**
  * The model answering the buying prompts, when Claude is in the prompt set.
  *
- * **Do not change this for cost.** It is not a tool the engine uses, it is the thing being
- * measured — the whole finding rests on the answer being the one a real person gets, and a
- * customer asking Claude does not get Haiku. Making it cheaper would measure something no
- * customer sees, which is the same mistake as asking for JSON instead of a real answer.
+ * Sonnet, and the reason is representativeness rather than cost. This is not a tool the
+ * engine uses, it is the thing being measured, so the only question that matters is which
+ * model a customer asking "best plumber in Birmingham" actually gets. Sonnet is the closer
+ * answer to that than Opus, so this is arguably more faithful as well as cheaper.
  *
- * It is also a time series: A3 tracks citation movement across runs, so swapping the model
- * mid-track makes any movement attributable to the swap rather than to anything that was
- * changed. Change it only to follow what customers actually use, and treat that as a break
- * in the series.
+ * What it is not is a free change. A3 tracks citation movement across runs, so this is a
+ * **break in the time series**: comparisons against snapshots taken on Opus measure the
+ * model swap as much as anything that was changed. Any future change here should be made
+ * for the same reason — following what customers use — and recorded as a break.
  */
-export const DEFAULT_CLAUDE_MODEL = OPUS;
+export const DEFAULT_CLAUDE_MODEL = SONNET;
 
 /** Roughly 2p an answer is the £0.30 AI-visibility line across 8 prompts x 3 models. */
 const DEFAULT_ANSWER_COST: Cost = { pence: 2 };

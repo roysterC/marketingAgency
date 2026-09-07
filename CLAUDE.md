@@ -168,3 +168,29 @@ npm run visibility -- --report --set X                        # movement + alert
 fails if a finding code, its severity or its confidence differs between the registry and the
 doc, if a declared collector emits no codes, or if a TypeScript enum has drifted from its
 CHECK constraint in the schema. Run it before committing taxonomy or schema changes.
+
+## Scan profiles and the provider cache
+
+Two cost mechanisms, both added after the first live scan and its billing data.
+
+**Profiles** ([`lib/scan/profiles.ts`](lib/scan/profiles.ts)) decide how much engine a
+prospect is worth. `full` is the paid audit and the demo; `hook` is outbound — `gbp` +
+`aivis`, three competitors, one-pager only. The ordering is the point: run `hook` over a
+list, `full` on whoever replies. A collector the profile excludes is never constructed, so
+it is never billed.
+
+```bash
+npm run scan -- --name "..." --postcode "..." --keywords "..." --profile hook
+```
+
+**The provider cache** ([`lib/db/provider-cache.ts`](lib/db/provider-cache.ts)) is the
+across-scan half of `collectors/scan-cache.ts`. DataForSEO billing showed three runs
+against one business buying review history for the same six place_ids three times, and
+competitor sets overlap heavily inside a vertical and city — ten plumbers come from a pool
+of maybe twenty, so scanning all ten buys most of them three or four times.
+
+What is cached is decided by whether the answer moves. Reviews, Business Profiles and
+vitals hold still for days and are cached. **Map-pack positions and AI answers never are**
+— those are the measurement, rankings move daily, and A3 tracks citation movement across
+runs. A hit costs nothing and records nothing, so `collector_runs.cost_pence` stays a
+measurement. `--no-cache` re-buys everything.

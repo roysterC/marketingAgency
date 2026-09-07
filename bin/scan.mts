@@ -21,8 +21,15 @@ import { join } from 'node:path';
 
 import { loadDotEnv, missingCredentials } from '../lib/adapters/config.ts';
 import { createFileScanStore, DEFAULT_STORE_PATH } from '../lib/db/file.ts';
+import {
+  TTL,
+  createFileProviderCache,
+  createNullProviderCache,
+  pruneCache,
+} from '../lib/db/provider-cache.ts';
 import { runScan, type CollectorFactory, type ProgressEvent } from '../lib/scan/run.ts';
-import { erase } from '../lib/collectors/types.ts';
+import { profileByName, runsCollector, type ScanProfile } from '../lib/scan/profiles.ts';
+import { erase, type AnyCollector } from '../lib/collectors/types.ts';
 import type { ResolveProviders } from '../lib/resolve/providers.ts';
 import type { NarrativeWriter } from '../lib/analyse/index.ts';
 
@@ -38,6 +45,12 @@ const has = (name: string): boolean => args.includes(`--${name}`);
 const OUT_DIR = flag('out') ?? '.scans';
 const storePath = flag('store') ?? join(OUT_DIR, 'store.json');
 
+/**
+ * How much engine to spend. `full` for the paid audit and the demo, `hook` for outbound.
+ * Run hook over a list, full on whoever replies — see lib/scan/profiles.ts.
+ */
+const profile: ScanProfile = profileByName(flag('profile') ?? 'full');
+
 const dim = (s: string) => `[2m${s}[0m`;
 const red = (s: string) => `[31m${s}[0m`;
 const green = (s: string) => `[32m${s}[0m`;
@@ -48,9 +61,12 @@ function usage(): never {
   ${bold('npm run scan')} -- --name "Riverside Plumbing" --postcode "SW18 4AB"
   ${bold('npm run scan')} -- --domain riversideplumbing.example
 
+  ${dim('--profile')}    ${bold('full')} (default) the paid audit and the demo — every collector
+                ${bold('hook')} cold outbound — gbp + aivis, one-pager, a fraction of the cost
   ${dim('--fixtures')}   run against fixtures. No keys, no network, no spend
   ${dim('--keywords')}   comma-separated money keywords. Required for a live scan:
                 competitors are chosen from the local results for these terms
+  ${dim('--no-cache')}   ignore the stored provider cache and re-buy everything
   ${dim('--out')}        where to write reports (default .scans)
   ${dim('--list')}       list previous scans and stop
 `);
@@ -122,12 +138,19 @@ async function wire(): Promise<{
     const { fixtureReviewsProvider } = await import('../lib/collectors/reviews/fixtures.ts');
     const { templateWriter } = await import('../lib/analyse/fixtures.ts');
 
+    // Filtered by the same profile as the live path, so `--fixtures --profile hook`
+    // exercises the real collector selection rather than a fixed pair.
+    const fixtureBuild: Record<string, () => AnyCollector> = {
+      gbp: () => erase(createGbpCollector(fixtureGbpProvider)),
+      reviews: () => erase(createReviewsCollector(fixtureReviewsProvider)),
+    };
+
     return {
       providers: fixtureProviders,
-      collectors: () => [
-        erase(createGbpCollector(fixtureGbpProvider)),
-        erase(createReviewsCollector(fixtureReviewsProvider)),
-      ],
+      collectors: () =>
+        profile.collectors.flatMap((name) =>
+          fixtureBuild[name] ? [fixtureBuild[name]!()] : [],
+        ),
       // Builds a narrative over this scan's own findings, so a fixture run exercises the
       // gate and the renderer without an LLM call.
       writer: templateWriter(),
@@ -184,6 +207,17 @@ async function wire(): Promise<{
   const places = placesConfigFromEnv();
   const dfs = dataForSeoConfigFromEnv();
 
+  // Survives the process, unlike the per-scan caches. The billing data showed three runs
+  // against one plumber buying review history for the same six place_ids three times, and
+  // competitor sets overlap heavily inside one vertical and city — ten plumbers are drawn
+  // from a pool of maybe twenty. Only the sources that hold still are wrapped: map-pack
+  // positions and AI answers are the measurement and are never served from disk.
+  const cache = has('no-cache')
+    ? createNullProviderCache()
+    : createFileProviderCache(join(OUT_DIR, 'cache.json'));
+
+  const identity = (placeId: string): string => placeId;
+
   // One cache instance shared by resolve and localrank. They ask for the same keywords at
   // the same point, so this is the difference between one round of SERP calls and two.
   const serp = scanSerpCache(createSerpProvider(dfs));
@@ -199,51 +233,83 @@ async function wire(): Promise<{
 
     // Built after resolve — `near` and the aivis roster are both facts about the resolved
     // business, and guessing either produces confident nonsense rather than a thin report.
-    collectors: (ctx) => [
-      erase(createGbpCollector(createGbpProvider(places))),
-      erase(
-        createReviewsCollector(
-          createReviewsProvider({ ...dfs, fallback: createPlacesReviewSampleProvider(places) }),
-        ),
-      ),
-      erase(
-        createSiteTechCollector({
-          crawler: createSiteCrawler({ contactUrl }),
-          vitals: createVitalsProvider(pageSpeedConfigFromEnv()),
-        }),
-      ),
-      erase(
-        createLocalRankCollector(serp, {
-          near: { lat: ctx.subject.lat, lng: ctx.subject.lng },
-          keywords: ctx.keywords.map((term) => ({ term, money: true })),
-        }),
-      ),
-      erase(
-        createAivisCollector(
-          scanPromptCache(
-            createAivisProvider({
-              sources: answerSourcesFromEnv(),
-              extractor: claudeExtractor(),
-              // Every business in the scan. A citation the extractor cannot place against
-              // this list matches nobody, and an empty roster therefore reports the whole
-              // set as invisible to AI whatever the models actually said.
-              roster: [ctx.subject, ...ctx.competitors].map((p) => ({
-                place_id: p.place_id,
-                name: p.name,
-              })),
+    // Built after resolve — `near` and the aivis roster are both facts about the resolved
+    // business, and guessing either produces confident nonsense rather than a thin report.
+    //
+    // Each entry is built lazily, so a collector the profile excludes is never constructed
+    // and therefore never billed.
+    collectors: (ctx) => {
+      const gbp = createGbpProvider(places);
+      const reviews = createReviewsProvider({
+        ...dfs,
+        fallback: createPlacesReviewSampleProvider(places),
+      });
+
+      const build: Record<string, () => AnyCollector> = {
+        gbp: () =>
+          erase(
+            createGbpCollector({
+              ...gbp,
+              fetchProfile: cache.wrap('gbp', TTL.gbp, identity, gbp.fetchProfile),
             }),
           ),
-          {
-            // The real category, not a placeholder. This selects the prompt set and labels
-            // the benchmark the finding is compared against.
-            vertical: ctx.vertical ?? 'unknown',
-            models: ['claude'],
-            prompts: ctx.keywords,
-          },
-          NO_KNOWN_FACTS,
-        ),
-      ),
-    ],
+
+        reviews: () =>
+          erase(
+            createReviewsCollector({
+              ...reviews,
+              fetchReviews: cache.wrap('reviews', TTL.reviews, identity, reviews.fetchReviews),
+            }),
+          ),
+
+        sitetech: () =>
+          erase(
+            createSiteTechCollector({
+              crawler: createSiteCrawler({ contactUrl }),
+              vitals: createVitalsProvider(pageSpeedConfigFromEnv()),
+            }),
+          ),
+
+        localrank: () =>
+          erase(
+            createLocalRankCollector(serp, {
+              near: { lat: ctx.subject.lat, lng: ctx.subject.lng },
+              keywords: ctx.keywords.map((term) => ({ term, money: true })),
+            }),
+          ),
+
+        aivis: () =>
+          erase(
+            createAivisCollector(
+              scanPromptCache(
+                createAivisProvider({
+                  sources: answerSourcesFromEnv(),
+                  extractor: claudeExtractor(),
+                  // Every business in the scan. A citation the extractor cannot place
+                  // against this list matches nobody, and an empty roster therefore
+                  // reports the whole set as invisible to AI whatever the models said.
+                  roster: [ctx.subject, ...ctx.competitors].map((p) => ({
+                    place_id: p.place_id,
+                    name: p.name,
+                  })),
+                }),
+              ),
+              {
+                // The real category, not a placeholder. This selects the prompt set and
+                // labels the benchmark the finding is compared against.
+                vertical: ctx.vertical ?? 'unknown',
+                models: ['claude'],
+                prompts: ctx.keywords,
+              },
+              NO_KNOWN_FACTS,
+            ),
+          ),
+      };
+
+      return profile.collectors
+        .filter((name) => runsCollector(profile, name))
+        .flatMap((name) => (build[name] ? [build[name]!()] : []));
+    },
     writer: createNarrativeWriter(writerConfigFromEnv()),
     keywords,
   };
@@ -275,7 +341,11 @@ try {
       providers,
       collectors,
       writer,
-      resolve: { keywords: money },
+      resolve: {
+        keywords: money,
+        max_competitors: profile.maxCompetitors,
+        enrich_limit: profile.enrichLimit,
+      },
       onProgress: (event: ProgressEvent) => console.log(dim(`  ${event.stage}: ${event.message}`)),
     },
   );
@@ -283,8 +353,17 @@ try {
   mkdirSync(OUT_DIR, { recursive: true });
   const stem = join(OUT_DIR, result.scan.id);
 
-  if (result.html) writeFileSync(`${stem}.html`, result.html, 'utf8');
-  if (result.onePager) writeFileSync(`${stem}.onepager.html`, result.onePager, 'utf8');
+  // A hook scan writes the one-pager only. The full report exists in the store either
+  // way; what the profile decides is which of them is worth putting in front of anyone.
+  const wrote: string[] = [];
+  if (result.html && profile.variants.includes('full')) {
+    writeFileSync(`${stem}.html`, result.html, 'utf8');
+    wrote.push(`${stem}.html`);
+  }
+  if (result.onePager && profile.variants.includes('onepager')) {
+    writeFileSync(`${stem}.onepager.html`, result.onePager, 'utf8');
+    wrote.push(`${stem}.onepager.html`);
+  }
 
   const seconds = ((Date.now() - started) / 1000).toFixed(1);
   const cost = `£${(result.scan.cost_pence / 100).toFixed(2)}`;
@@ -305,11 +384,14 @@ try {
     process.exit(1);
   }
 
+  const pruned = has('no-cache') ? 0 : pruneCache(join(OUT_DIR, 'cache.json'));
+
   console.log(
     `\n  ${green('Done')} in ${seconds}s for ${cost}` +
       `\n    ${result.findings.length} findings across ${result.targets.length} businesses` +
-      `\n    ${stem}.html` +
-      `\n    ${stem}.onepager.html\n`,
+      wrote.map((f) => `\n    ${f}`).join('') +
+      (pruned > 0 ? dim(`\n    ${pruned} expired cache entries pruned`) : '') +
+      '\n',
   );
 } catch (error) {
   console.error(`\n  ${red('Scan failed')}: ${error instanceof Error ? error.message : error}\n`);
