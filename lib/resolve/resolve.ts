@@ -11,6 +11,7 @@
 import type { Segment } from '../taxonomy/enums';
 import type { ScanRequest } from '../types/index';
 import { groupAppearances, isDirectory, selectCompetitors } from './competitors';
+import { PLACES_CONCURRENCY, SERP_CONCURRENCY, settleLimit } from './concurrency';
 import { detectPlatform, type Platform } from './platform';
 import { toOutwardCode } from './region';
 import { CostMeter, type MapPackEntry, type ResolveProviders } from './providers';
@@ -126,15 +127,25 @@ export async function resolveScan(
   const subject = await resolveSubject(request, providers, meter);
 
   // --- keyword sweep -------------------------------------------------------
+  //
+  // Concurrent: the queries are independent, and serially they were the single largest
+  // block of time in a scan. Where two of them want the same response the scan cache
+  // hands both callers the same in-flight promise rather than buying it twice.
+  const swept = await settleLimit(options.keywords, SERP_CONCURRENCY, (keyword) =>
+    providers.serp.mapPack(keyword, subject),
+  );
+
+  // Unwound in input order, so cost accounting and warnings do not depend on which
+  // request happened to finish first.
   const perKeyword: Array<{ keyword: string; entries: MapPackEntry[] }> = [];
-  for (const keyword of options.keywords) {
-    try {
-      const entries = meter.take(await providers.serp.mapPack(keyword, subject));
-      perKeyword.push({ keyword, entries });
-    } catch (error) {
-      warnings.push(`Map pack lookup failed for "${keyword}": ${(error as Error).message}`);
+  swept.forEach((outcome, index) => {
+    const keyword = options.keywords[index]!;
+    if (outcome.value) {
+      perKeyword.push({ keyword, entries: meter.take(outcome.value) });
+    } else {
+      warnings.push(`Map pack lookup failed for "${keyword}": ${outcome.error}`);
     }
-  }
+  });
 
   if (perKeyword.length === 0 && options.keywords.length > 0) {
     warnings.push('No map pack data was retrieved; competitor selection was skipped.');
@@ -152,20 +163,33 @@ export async function resolveScan(
     .slice(0, enrichLimit);
 
   // --- enrich ---------------------------------------------------------------
+  //
+  // Also concurrent, and bounded: this is up to `enrich_limit` paid lookups, and finding
+  // a provider's rate limit partway through a scan someone is paying for is not the way
+  // to discover it.
+  const enriched = await settleLimit(shortlist, PLACES_CONCURRENCY, ([placeId]) =>
+    providers.places.details(placeId),
+  );
+
   const candidates: Candidate[] = [];
-  for (const [placeId, info] of shortlist) {
-    try {
-      const place = meter.take(await providers.places.details(placeId));
-      if (!place) continue;
-      candidates.push(
-        ...groupAppearances(
-          info.hits.map((hit) => ({ keyword: hit.keyword, position: hit.position, place })),
-        ),
-      );
-    } catch (error) {
-      warnings.push(`Details lookup failed for "${info.name}": ${(error as Error).message}`);
+  enriched.forEach((outcome, index) => {
+    const [, info] = shortlist[index]!;
+    if (!outcome.value) {
+      if (outcome.error) {
+        warnings.push(`Details lookup failed for "${info.name}": ${outcome.error}`);
+      }
+      return;
     }
-  }
+
+    const place = meter.take(outcome.value);
+    if (!place) return;
+
+    candidates.push(
+      ...groupAppearances(
+        info.hits.map((hit) => ({ keyword: hit.keyword, position: hit.position, place })),
+      ),
+    );
+  });
 
   // --- select ---------------------------------------------------------------
   const selection = selectCompetitors(subject, candidates, options.keywords.length, options);

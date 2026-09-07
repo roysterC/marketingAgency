@@ -80,6 +80,82 @@ describe('resolveScan', () => {
   });
 });
 
+describe('resolveScan concurrency', () => {
+  /** Wraps the fixture providers, timing and counting overlapping calls. */
+  function instrumented(delayMs: number) {
+    let serpInFlight = 0;
+    let serpPeak = 0;
+    let placesInFlight = 0;
+    let placesPeak = 0;
+
+    const slow = async <T>(work: () => Promise<T>, track: 'serp' | 'places'): Promise<T> => {
+      if (track === 'serp') {
+        serpInFlight += 1;
+        serpPeak = Math.max(serpPeak, serpInFlight);
+      } else {
+        placesInFlight += 1;
+        placesPeak = Math.max(placesPeak, placesInFlight);
+      }
+      try {
+        await new Promise((r) => setTimeout(r, delayMs));
+        return await work();
+      } finally {
+        if (track === 'serp') serpInFlight -= 1;
+        else placesInFlight -= 1;
+      }
+    };
+
+    return {
+      get serpPeak() {
+        return serpPeak;
+      },
+      get placesPeak() {
+        return placesPeak;
+      },
+      providers: {
+        ...fixtureProviders,
+        serp: {
+          name: 'slow-serp',
+          mapPack: (k: string, near: { lat: number; lng: number }) =>
+            slow(() => fixtureProviders.serp.mapPack(k, near), 'serp'),
+        },
+        places: {
+          ...fixtureProviders.places,
+          details: (id: string) => slow(() => fixtureProviders.places.details(id), 'places'),
+        },
+      },
+    };
+  }
+
+  test('sweeps keywords concurrently rather than one at a time', async () => {
+    // The first live scan spent 467 of 672 seconds outside the collectors, most of it
+    // awaiting one independent request at a time.
+    const rig = instrumented(20);
+    await resolveScan(REQUEST, rig.providers, OPTIONS);
+
+    assert.ok(rig.serpPeak > 1, `keyword sweep ran serially (peak ${rig.serpPeak})`);
+    assert.ok(rig.placesPeak > 1, `enrichment ran serially (peak ${rig.placesPeak})`);
+  });
+
+  test('is faster than the serial equivalent', async () => {
+    const rig = instrumented(30);
+    const started = Date.now();
+    await resolveScan(REQUEST, rig.providers, OPTIONS);
+    const elapsed = Date.now() - started;
+
+    // 5 keywords + 6 enrichments at 30ms each is 330ms serially. Concurrency should beat
+    // that comfortably; the bound is loose so a slow CI box does not fail it.
+    assert.ok(elapsed < 300, `expected concurrency to beat serial, took ${elapsed}ms`);
+  });
+
+  test('still accounts cost in input order, whatever finishes first', async () => {
+    const rig = instrumented(5);
+    const { cost_pence } = await resolveScan(REQUEST, rig.providers, OPTIONS);
+    // Same total as the serial version: 1 subject + 5 sweeps + 6 enrichments at 3p.
+    assert.equal(cost_pence, 36);
+  });
+});
+
 describe('resolveScan degradation', () => {
   test('throws only when the subject cannot be resolved', async () => {
     const missing: ScanRequest = {
