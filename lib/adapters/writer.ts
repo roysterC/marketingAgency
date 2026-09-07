@@ -28,11 +28,23 @@ import type { AnalysisBrief } from '../analyse/brief';
 import { COLLECTORS } from '../taxonomy/enums';
 import type { Narrative } from '../types/index';
 import { required, type Env } from './config';
+import { HAIKU, contextWindowOf, thinkingFor } from './models';
 
-export const DEFAULT_WRITER_MODEL = 'claude-opus-5';
+/**
+ * Haiku 4.5, for cost. Two things to know before leaving it here.
+ *
+ * The saving is real but small in absolute terms — roughly 18p a scan against 60p on
+ * Opus — because the writer runs once. Extraction (`aivis.ts`) is where model choice
+ * actually moves the bill, since that one runs ~48 times a scan.
+ *
+ * And this is the only call in the engine whose output a client reads. If report prose
+ * is the thing being judged, `SONNET` is the better trade: 1M context and adaptive
+ * thinking, still 60% under Opus. Swap the constant — `thinkingFor()` adjusts.
+ */
+export const DEFAULT_WRITER_MODEL = HAIKU;
 
-/** ~£0.60 for a 150k-in / 15k-out analysis, per the cost table. */
-const DEFAULT_COST: Cost = { pence: 60 };
+/** ~£0.18 for a 150k-in / 15k-out analysis on Haiku ($1/$5 per MTok). */
+const DEFAULT_COST: Cost = { pence: 18 };
 
 const ClaimSchema = z.object({
   text: z.string(),
@@ -120,13 +132,29 @@ export function createNarrativeWriter(config: WriterConfig = {}): NarrativeWrite
     name: `claude-writer/${model}`,
 
     async write(brief): Promise<Priced<Narrative>> {
+      const rendered = renderBrief(brief);
+
+      // The brief runs ~150k tokens on a full scan and Haiku's window is 200K, against
+      // 1M on Opus and Sonnet. Close enough that a findings-heavy scan could cross it, so
+      // say which model and how big rather than surfacing a raw 400 halfway through.
+      const estimatedTokens = Math.ceil(rendered.length / 4);
+      const window = contextWindowOf(model);
+      if (estimatedTokens > window * 0.9) {
+        throw new Error(
+          `The analysis brief is ~${estimatedTokens} tokens, too close to ${model}'s ` +
+            `${window}-token window. Use a model with a larger context (SONNET or OPUS ` +
+            `in lib/adapters/models.ts) for scans this size.`,
+        );
+      }
+
       const response = await client.messages.parse({
         model,
         max_tokens: maxTokens,
         system: WRITER_SYSTEM,
         // Judgement about what matters commercially, over a page of structured findings.
-        thinking: { type: 'adaptive' },
-        messages: [{ role: 'user', content: renderBrief(brief) }],
+        // Shape depends on the model — adaptive is rejected by Haiku, budget_tokens by Opus.
+        thinking: thinkingFor(model),
+        messages: [{ role: 'user', content: rendered }],
         output_config: { format: zodOutputFormat(NarrativeSchema) },
       });
 

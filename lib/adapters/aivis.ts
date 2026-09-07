@@ -29,14 +29,40 @@ import type {
 } from '../collectors/aivis/types';
 import { optional, required, type Env } from './config';
 import { requestJson, type RetryPolicy } from './http';
+import { HAIKU, OPUS, thinkingFor } from './models';
 
-/** The model the extraction pass runs on. Configurable — it is the volume call. */
-export const DEFAULT_EXTRACTION_MODEL = 'claude-opus-5';
-/** The model answering the buying prompts, when Claude is in the prompt set. */
-export const DEFAULT_CLAUDE_MODEL = 'claude-opus-5';
+/**
+ * The model the extraction pass runs on.
+ *
+ * Haiku, and this is where model choice actually moves the bill: extraction runs roughly
+ * 48 times a scan (8 prompts x 3 models, extract + entity check each) against the writer's
+ * one. The work is structured extraction from a short answer with a schema pinning the
+ * output — no judgement, nothing a larger model does better.
+ *
+ * Safe to make cheap precisely because nothing it returns is treated as true: it turns an
+ * answer into citations and claims, and `AIVIS_OUTDATED_FACT` fires when those disagree
+ * with ground truth from `gbp`.
+ */
+export const DEFAULT_EXTRACTION_MODEL = HAIKU;
+
+/**
+ * The model answering the buying prompts, when Claude is in the prompt set.
+ *
+ * **Do not change this for cost.** It is not a tool the engine uses, it is the thing being
+ * measured — the whole finding rests on the answer being the one a real person gets, and a
+ * customer asking Claude does not get Haiku. Making it cheaper would measure something no
+ * customer sees, which is the same mistake as asking for JSON instead of a real answer.
+ *
+ * It is also a time series: A3 tracks citation movement across runs, so swapping the model
+ * mid-track makes any movement attributable to the swap rather than to anything that was
+ * changed. Change it only to follow what customers actually use, and treat that as a break
+ * in the series.
+ */
+export const DEFAULT_CLAUDE_MODEL = OPUS;
 
 /** Roughly 2p an answer is the £0.30 AI-visibility line across 8 prompts x 3 models. */
 const DEFAULT_ANSWER_COST: Cost = { pence: 2 };
+/** Extraction on Haiku: a short answer in, a small schema out. */
 const DEFAULT_EXTRACTION_COST: Cost = { pence: 1 };
 
 /** One model, answering a question the way a customer would ask it. */
@@ -136,7 +162,7 @@ export function claudeSource(config: ClaudeSourceConfig = {}): AnswerSource {
       const response = await client.messages.create({
         model,
         max_tokens: 4000,
-        thinking: { type: 'adaptive' },
+        thinking: thinkingFor(model),
         messages: [{ role: 'user', content: prompt }],
       });
 

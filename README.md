@@ -117,7 +117,7 @@ Four are required: `GOOGLE_PLACES_API_KEY`, `DATAFORSEO_LOGIN`, `DATAFORSEO_PASS
 deferred.
 
 The four ship criteria are in the [spec](docs/teardown-engine.md#9-phase-1-mvp), and none of them
-can be signed off from here. One is budgeted rather than met — a scan is costed at £1.50–2.65
+can be signed off from here. One is budgeted rather than met — a scan is costed at £1.08–2.23
 against a £5 ceiling, but `collector_runs.cost_pence` records actuals and only a real run proves
 it. The other three need the reports to exist: that it runs unattended on ten businesses, that
 every report carries two findings which are embarrassing, verifiable and previously unknown, and

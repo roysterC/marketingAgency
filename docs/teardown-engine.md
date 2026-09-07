@@ -454,8 +454,8 @@ Cold SMB scan, 1 subject + 5 competitors:
 | Own crawl | negligible |
 | Speed-to-lead test (form probe + one call) | ~£0.03 |
 | AI visibility (8 prompts × 3 models) | ~£0.30 |
-| LLM analysis (~150k in / 15k out) | ~£0.60 |
-| **Total** | **~£1.50 – 2.65** |
+| LLM analysis (~150k in / 15k out, Haiku 4.5) | ~£0.18 |
+| **Total** | **~£1.08 – 2.23** |
 
 DTC adds ad-library data (~£1). Budget **£2–5 per scan**. Against a £500–1,500 product that is
 noise, and it's still viable at cold-outbound volume.

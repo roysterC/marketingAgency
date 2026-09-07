@@ -121,7 +121,9 @@ const LIVE: Record<string, () => Promise<Check>> = {
         'anthropic-version': '2023-06-01',
       },
       body: JSON.stringify({
-        model: 'claude-opus-5',
+        // Cheapest model that proves the key authenticates — this call is a credential
+        // ping, not work, and any model answers the only question being asked.
+        model: 'claude-haiku-4-5',
         max_tokens: 1,
         messages: [{ role: 'user', content: 'hi' }],
       }),
